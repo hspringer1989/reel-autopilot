@@ -268,12 +268,15 @@ def _reel_script(c: Candidate, llm: LLMProvider, topic: str) -> tuple[dict, str,
 
 def build_stock_reel(ticker: str, topic: str = "", md: MarketData | None = None,
                      llm: LLMProvider | None = None, texts: dict | None = None,
-                     caption: str = "") -> int | None:
+                     caption: str = "", hook_query: str = "", cta_query: str = "") -> int | None:
     """Analyse one ticker → 5-segment voiceover reel with the chart/fundamental/overall
     frames as backgrounds. Persists a ReelRow(pending_review); returns its id or None.
 
     `texts` (hook/chart/fundamental/overall/cta) can be supplied to REUSE an earlier
-    (e.g. Claude-written) script without a fresh LLM call; `caption` likewise."""
+    (e.g. Claude-written) script without a fresh LLM call; `caption` likewise.
+    `hook_query`/`cta_query` override the opening/closing Pexels b-roll search so the
+    visuals fit the theme (e.g. ice cream for a summer-seasonality reel); default to the
+    generic AI-themed queries."""
     md = md or get_market_data()
     llm = llm or get_llm()
     topic = topic or "aktuell stark im Gespräch"
@@ -314,8 +317,8 @@ def build_stock_reel(ticker: str, topic: str = "", md: MarketData | None = None,
         fund_img = render_reel_fundamental_frame(c, f"{base}_fund.jpg")
         over_img = render_reel_overall_frame(c, f"{base}_over.jpg")
         broll = PexelsBroll()
-        paths = [broll.fetch(_HOOK_QUERY, 2.0), chart_img, fund_img, over_img,
-                 broll.fetch(_CTA_QUERY, 2.0)]
+        paths = [broll.fetch(hook_query or _HOOK_QUERY, 2.0), chart_img, fund_img, over_img,
+                 broll.fetch(cta_query or _CTA_QUERY, 2.0)]
         video = render_reel(script, tts, paths, base.with_suffix(".mp4"), pick_music())
     except Exception as exc:  # noqa: BLE001
         logger.error(f"Aktien-Reel #{reel_id} fehlgeschlagen: {exc}")
