@@ -109,11 +109,25 @@ class YFinanceMarketData(MarketData):
             return None
         if hist is None or hist.empty:
             return None
-        return {
-            "high": [float(x) for x in hist["High"].tolist()],
-            "low": [float(x) for x in hist["Low"].tolist()],
-            "close": [float(x) for x in hist["Close"].tolist()],
-        }
+        # yfinance occasionally returns NaN/inf bars (holidays, missing days, partial
+        # data for thin/foreign tickers). Drop those rows — a non-finite value otherwise
+        # flows into price/risk-marks/chart-scale and crashes the card renderer.
+        import math
+
+        high: list[float] = []
+        low: list[float] = []
+        close: list[float] = []
+        for h, l, c in zip(hist["High"].tolist(), hist["Low"].tolist(), hist["Close"].tolist()):
+            h, l, c = float(h), float(l), float(c)
+            if not (math.isfinite(h) and math.isfinite(l) and math.isfinite(c)):
+                continue
+            high.append(h)
+            low.append(l)
+            close.append(c)
+        if len(close) < 2:
+            logger.warning(f"yfinance history({ticker}): zu wenige gültige Bars nach NaN-Filter")
+            return None
+        return {"high": high, "low": low, "close": close}
 
     def info(self, ticker: str) -> dict | None:
         try:

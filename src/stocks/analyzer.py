@@ -77,6 +77,10 @@ def analyze_ticker(md: MarketData, ticker: str) -> StockMetrics | None:
 
     closes = bars["close"]
     price = closes[-1]
+    import math
+    if not math.isfinite(price) or price <= 0:
+        logger.debug(f"{ticker}: ungültiger Kurs ({price}) — übersprungen")
+        return None
     sma20 = ind.sma(closes, 20)
     sma50 = ind.sma(closes, 50)
     rsi_value = ind.rsi(closes)

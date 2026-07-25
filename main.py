@@ -27,6 +27,11 @@ from src.storage.database import ApiUsageRow, FeedPostRow, ReelRow, init_db, ses
 _LOOP_TICK_S = 60
 _GENERATE_COOLDOWN_S = 3600
 _INSIGHTS_SLOT = "07:00"
+# The daily stock build normally fires exactly at STOCK_STORY_SLOT. If the process
+# is down at that minute (crash/restart/deploy), catch it up on the next tick as long
+# as we are still before this cutoff — so a restart just after 09:00 no longer loses
+# the whole day's watchlist + analyses.
+_STOCK_BUILD_CATCHUP_UNTIL = "12:00"
 _WEEKDAYS = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
 
 
@@ -340,10 +345,16 @@ async def _run_loop() -> None:
             #    approved cards at their slots (earnings/overview morning, candidates
             #    at their market's trading hours).
             hhmm = now.strftime("%H:%M")
-            if hhmm == config.STOCK_STORY_SLOT and (slot_key[0], "stocks_build") not in done_slots:
+            if ((slot_key[0], "stocks_build") not in done_slots
+                    and config.STOCK_STORY_SLOT <= hhmm < _STOCK_BUILD_CATCHUP_UNTIL):
                 done_slots.add((slot_key[0], "stocks_build"))
-                story_ids = await asyncio.to_thread(build_daily_stories)
-                await send_stories_for_review(story_ids)
+                try:
+                    story_ids = await asyncio.to_thread(build_daily_stories)
+                    await send_stories_for_review(story_ids)
+                except Exception as exc:  # noqa: BLE001 — a build failure must never kill the loop
+                    logger.exception(f"Tages-Story-Build fehlgeschlagen: {exc}")
+                    if review_configured():
+                        await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
 
             if publishing_configured():
                 if hhmm == config.STORY_POST_EARNINGS_SLOT and (slot_key[0], "story_morning") not in done_slots:

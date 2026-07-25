@@ -262,6 +262,11 @@ def _mini_chart(draw, box, m, c) -> None:
     pad = 26
     ax0, ay0, ax1, ay1 = x0 + pad, y0 + pad + 6, x1 - pad, y1 - pad
     lo, hi = min(min(closes), c.stop_loss), max(max(closes), c.take_profit)
+    import math
+    if not all(math.isfinite(v) for v in (lo, hi, c.stop_loss, c.take_profit)):
+        # defensive: a non-finite price/risk-mark must never crash the whole build
+        draw.text((x0 + 24, y0 + 24), "Chartdaten n/a", font=_font(26), fill=_MUTED)
+        return
     if hi <= lo:
         hi = lo + 1.0
     def X(i): return ax0 + (ax1 - ax0) * i / (len(closes) - 1)

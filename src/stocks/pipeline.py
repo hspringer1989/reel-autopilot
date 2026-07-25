@@ -116,12 +116,18 @@ def build_daily_stories(
     # 3) Three cards per candidate (Charttechnik → Fundamental → Gesamtbild),
     #    posted as a group later at the market's trading hours.
     for c in candidates:
-        story_ids.extend(_persist_candidate_cards(c, out_dir, trade_date))
+        try:
+            story_ids.extend(_persist_candidate_cards(c, out_dir, trade_date))
+        except Exception as exc:  # noqa: BLE001 — one bad ticker must never kill the whole daily build
+            logger.exception(f"Analyse-Card für {c.metrics.ticker} fehlgeschlagen — übersprungen: {exc}")
 
     # 4) News-driven "Trend-Aktie": one stock most in the news today (same cooldown
     #    pool, so it never repeats a recently-shown ticker), analysed the same way.
     if config.STOCK_TREND_ENABLED:
-        story_ids.extend(_build_trend_story(md, llm, out_dir, trade_date, exclude))
+        try:
+            story_ids.extend(_build_trend_story(md, llm, out_dir, trade_date, exclude))
+        except Exception as exc:  # noqa: BLE001 — trend card is optional, never fatal
+            logger.exception(f"Trend-Aktien-Story fehlgeschlagen — übersprungen: {exc}")
 
     logger.info(f"{len(story_ids)} Story-Cards erstellt (pending_review)")
     return story_ids
