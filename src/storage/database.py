@@ -195,6 +195,110 @@ class ApiUsageRow(Base):
     created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
 
 
+# ── Community (DM-/Kommentar-Automatisierung + Engagement-Digest) ───────────
+# Classification is the routing decision for a comment/DM:
+#   harmless   → auto-reply (thanks, emoji, simple praise)
+#   substantive→ Telegram approval (finance question, discussion, correction)
+#   sensitive  → Telegram approval, NEVER auto (buy/sell/target, complaint, legal, cooperation)
+#   spam       → skip/hide, never reply
+COMMUNITY_CLASSES = ("harmless", "substantive", "sensitive", "spam")
+
+# Comment status flow:
+#   new → auto_replied            (harmless, live mode)
+#       → pending_review → replied (substantive/sensitive, after Telegram ✅)
+#       → skipped                  (spam or ❌)
+#       → escalated                (budget/rate-limit → handled manually in Telegram)
+#       → shadow                   (Phase 1: classified + notified, never acted on)
+#       → failed                   (API error while replying)
+COMMENT_STATUSES = (
+    "new", "auto_replied", "pending_review", "replied", "skipped",
+    "escalated", "shadow", "failed",
+)
+
+
+class CommentRow(Base):
+    """A comment on one of our own published media (reel/feed), tracked for
+    auto-reply / escalation. Deduped by the Instagram comment id."""
+    __tablename__ = "comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ig_comment_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    ig_media_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    parent_ig_comment_id: Mapped[str] = mapped_column(String(64), default="")  # thread reply
+    media_kind: Mapped[str] = mapped_column(String(8), default="")  # reel | feed
+    author_id: Mapped[str] = mapped_column(String(64), default="")
+    author_username: Mapped[str] = mapped_column(String(64), default="")
+    text: Mapped[str] = mapped_column(Text, default="")
+    comment_time: Mapped[str] = mapped_column(String(40), default="")  # IG timestamp
+    classification: Mapped[str] = mapped_column(String(16), default="", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="new", index=True)
+    reply_text: Mapped[str] = mapped_column(Text, default="")   # draft or posted reply
+    reply_ig_id: Mapped[str] = mapped_column(String(64), default="")
+    tg_message_id: Mapped[str] = mapped_column(String(32), default="", index=True)  # edit-flow lookup
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
+    replied_at: Mapped[str] = mapped_column(String(40), default="")  # set when a reply is sent
+
+
+class DmThreadRow(Base):
+    """One Instagram direct-message conversation. `last_user_message_at` drives the
+    24h reply-window check; status open|escalated|muted."""
+    __tablename__ = "dm_threads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ig_thread_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    participant_id: Mapped[str] = mapped_column(String(64), default="")  # IGSID of the user
+    participant_username: Mapped[str] = mapped_column(String(64), default="")
+    last_user_message_at: Mapped[str] = mapped_column(String(40), default="")  # IG timestamp
+    status: Mapped[str] = mapped_column(String(12), default="open", index=True)
+    updated_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
+
+
+# DM message status flow mirrors comments (no pending_review batch — DMs auto-reply
+# or escalate directly, per the user's "vollautomatisch" choice).
+DM_STATUSES = ("new", "auto_replied", "escalated", "skipped", "shadow", "failed")
+
+
+class DmMessageRow(Base):
+    """One direct message inside a thread. Inbound messages get classified and
+    answered; outbound messages are logged for thread context. Deduped by IG id."""
+    __tablename__ = "dm_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ig_message_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    thread_id: Mapped[int] = mapped_column(Integer, index=True)  # FK → dm_threads.id
+    direction: Mapped[str] = mapped_column(String(4), default="in")  # in | out
+    text: Mapped[str] = mapped_column(Text, default="")
+    attachment_type: Mapped[str] = mapped_column(String(24), default="")  # e.g. story_reply, share
+    classification: Mapped[str] = mapped_column(String(16), default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(16), default="new", index=True)
+    reply_text: Mapped[str] = mapped_column(Text, default="")
+    tg_message_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    message_time: Mapped[str] = mapped_column(String(40), default="")  # IG timestamp
+    created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
+    replied_at: Mapped[str] = mapped_column(String(40), default="")
+
+
+class DigestItemRow(Base):
+    """One entry of the daily engagement digest (relevant foreign post / profile to
+    engage with MANUALLY). Deduped by uid; status sent|dismissed."""
+    __tablename__ = "digest_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    source: Mapped[str] = mapped_column(String(16), default="")  # hashtag | profile | topic
+    hashtag: Mapped[str] = mapped_column(String(48), default="")
+    permalink: Mapped[str] = mapped_column(Text, default="")
+    caption_excerpt: Mapped[str] = mapped_column(Text, default="")
+    suggested_comment: Mapped[str] = mapped_column(Text, default="")
+    date: Mapped[str] = mapped_column(String(10), index=True, default="")  # YYYY-MM-DD (local)
+    status: Mapped[str] = mapped_column(String(12), default="sent", index=True)
+    created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
+
+
 _engine = None
 _session_factory = None
 
@@ -266,3 +370,19 @@ def daily_usage_units(session: Session, provider: str, date: str) -> int:
         .where(ApiUsageRow.provider == provider, ApiUsageRow.date == date)
     ).scalar()
     return int(total or 0)
+
+
+def replies_sent_since(session: Session, iso_cutoff: str) -> int:
+    """Count outbound community replies (comments + DMs) sent at/after `iso_cutoff`
+    (ISO-8601 UTC). Drives the combined hourly rate limit in the community guard."""
+    comments = session.execute(
+        select(func.count()).where(
+            CommentRow.replied_at != "", CommentRow.replied_at >= iso_cutoff
+        )
+    ).scalar()
+    dms = session.execute(
+        select(func.count()).where(
+            DmMessageRow.replied_at != "", DmMessageRow.replied_at >= iso_cutoff
+        )
+    ).scalar()
+    return int(comments or 0) + int(dms or 0)

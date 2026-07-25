@@ -168,6 +168,39 @@ reserved for the signal meaning, not the brand accent.
 via `_recent_candidate_tickers`; `select_candidates(exclude=…)` holds them back and only reuses
 them as a last resort. `STOCK_UNIVERSE` was widened to ~90 US+EU names to feed the cooldown.
 
+### Community automation (DMs, comments, engagement digest) — `src/community/`
+
+A fourth path, independent of content generation: auto-replies to comments on our own
+posts and to DMs, plus a daily engagement digest. Polled inside the scheduler tick
+(no webhook server); every external call sits behind `CommunityAPI` (`api.py`) with a
+`FakeCommunityAPI`; all Claude calls use Haiku through the budget-gated `LLMProvider`.
+
+```
+scheduler tick (every COMMUNITY_POLL_MINUTES)
+  poll_comments()  src/community/comments.py   fetch own recent media's comments →
+      dedup (comments table) → classify_comments (Haiku, batched) → route:
+        harmless+conf≥MIN → auto-reply | substantive/sensitive/low-conf → Telegram
+        approval | spam → skip.  Shadow mode classifies + notifies, never posts.
+  poll_dms()       src/community/dms.py         /me/conversations → dedup (dm_messages)
+      → classify_dm → auto-reply within the 24h window / escalate sensitive+closed.
+  build_digest()   src/community/digest.py      hashtag search (usually unavailable on
+      Instagram-Login) → fallback to profiles + collector topics → Telegram list.
+```
+
+- **Routing/compliance**: classifier (`classifier.py`) + prompts from
+  `docs/community-antworten.md` (`prompts.py`); a code-level phrase filter
+  (`violates_compliance`) forces any advice-sounding auto-reply to `sensitive`
+  (human review). `sensitive` is NEVER auto-answered.
+- **Telegram**: `cmt:`/`dm:` callback prefixes + a reply-to-message edit flow in
+  `src/review/telegram_bot.py`; `resolve_review`/`resolve_edit` live in the pipelines.
+- **Guards** (`guard.py`): `COMMUNITY_ENABLED` kill-switch, `COMMUNITY_SHADOW_MODE`,
+  combined hourly rate limit, own-account filter, 24h DM window.
+- **Gates** roll out in phases: comments shadow → comments live → `COMMUNITY_DM_ENABLED`
+  → `COMMUNITY_DIGEST_ENABLED`. Manual cycle: `python main.py community`; capability
+  check: `python main.py verify-ig` (probes the comment/DM/hashtag edges).
+- **Out of scope by design**: no auto commenting/liking/following on foreign profiles
+  (no official API, ToS violation) — the digest replaces it with manual suggestions.
+
 ## Compliance (do not weaken)
 
 - Scripts must stay educational/news-driven — no buy/sell recommendations for

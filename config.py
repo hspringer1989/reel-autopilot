@@ -79,6 +79,32 @@ PUBLIC_MEDIA_DIR = _get("PUBLIC_MEDIA_DIR")
 POSTING_SLOTS = _get_list("POSTING_SLOTS", "08:00,12:30,18:00")
 TIMEZONE = _get("TIMEZONE", "Europe/Berlin")
 
+# ── Community (DM-/Kommentar-Automatisierung + Engagement-Digest) ──────────
+# Kill-Switch (Default aus). SHADOW klassifiziert + meldet nur, postet nie (Phase 1).
+COMMUNITY_ENABLED = _get("COMMUNITY_ENABLED", "false").lower() == "true"
+COMMUNITY_SHADOW_MODE = _get("COMMUNITY_SHADOW_MODE", "true").lower() == "true"
+COMMUNITY_POLL_MINUTES = int(_get("COMMUNITY_POLL_MINUTES", "3"))
+# Obergrenze ausgehender Auto-Antworten (Kommentare + DMs zusammen) pro Stunde.
+COMMUNITY_MAX_REPLIES_PER_HOUR = int(_get("COMMUNITY_MAX_REPLIES_PER_HOUR", "10"))
+# Nur Kommentare auf Medien pollen, die innerhalb dieses Fensters veröffentlicht wurden.
+COMMUNITY_COMMENT_LOOKBACK_DAYS = int(_get("COMMUNITY_COMMENT_LOOKBACK_DAYS", "14"))
+# DMs sind ein separates Gate (Phase 3), da sie eine eigene Berechtigung brauchen.
+COMMUNITY_DM_ENABLED = _get("COMMUNITY_DM_ENABLED", "false").lower() == "true"
+# Instagram erlaubt Antworten nur im 24h-Fenster nach der letzten Nutzernachricht.
+COMMUNITY_DM_WINDOW_HOURS = int(_get("COMMUNITY_DM_WINDOW_HOURS", "24"))
+# Ab dieser Klassifikator-Konfidenz gilt eine Antwort als sicher genug für Auto-Versand.
+COMMUNITY_MIN_CONFIDENCE = float(_get("COMMUNITY_MIN_CONFIDENCE", "0.75"))
+# Engagement-Digest (Phase 4): tägliche Telegram-Liste relevanter fremder Posts/Profile.
+COMMUNITY_DIGEST_ENABLED = _get("COMMUNITY_DIGEST_ENABLED", "false").lower() == "true"
+COMMUNITY_DIGEST_SLOT = _get("COMMUNITY_DIGEST_SLOT", "08:30")
+# ≤4/Tag aus dieser Liste rotieren (IG-Limit: 30 unique Hashtags / 7 Tage).
+COMMUNITY_DIGEST_HASHTAGS = _get_list(
+    "COMMUNITY_DIGEST_HASHTAGS", "finanzen,aktien,börse,investieren,etf"
+)
+COMMUNITY_DIGEST_HASHTAGS_PER_DAY = int(_get("COMMUNITY_DIGEST_HASHTAGS_PER_DAY", "4"))
+# Handles inhaltsverwandter Profile, die als manuelle Check-Links im Digest erscheinen.
+COMMUNITY_DIGEST_PROFILES = _get_list("COMMUNITY_DIGEST_PROFILES", "")
+
 # ── Branding ──────────────────────────────────────────────────────────────
 # Display name + IG handle of the actually connected account (@rendite.radar.official,
 # verified via `main.py verify-ig`). Keep these aligned with the real account.

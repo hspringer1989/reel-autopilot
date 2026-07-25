@@ -141,6 +141,28 @@ def cmd_post_feed(post_id: int) -> None:
     print(f"Feed-Post #{post_id} veröffentlicht (+ New-Post-Story).")
 
 
+def cmd_community() -> None:
+    """One manual poll cycle (comments + DMs + digest) — for local dry-runs and
+    Phase-1 validation. No-op unless COMMUNITY_ENABLED (per-part gates still apply)."""
+    from src.community.comments import poll_comments
+    from src.community.digest import build_digest
+    from src.community.dms import poll_dms
+
+    if not config.COMMUNITY_ENABLED:
+        print("Hinweis: COMMUNITY_ENABLED=false — Pipelines sind deaktiviert (No-Op).")
+
+    async def _run() -> tuple[dict, dict, int]:
+        comments = await poll_comments()
+        dms = await poll_dms()
+        digest = await build_digest()
+        return comments, dms, digest
+
+    comments, dms, digest = asyncio.run(_run())
+    print(f"Kommentare: {comments or 'deaktiviert'}")
+    print(f"DMs:        {dms or 'deaktiviert'}")
+    print(f"Digest:     {digest} neue Einträge")
+
+
 def cmd_verify_ig() -> None:
     from src.publish.instagram import verify_credentials
 
@@ -171,6 +193,23 @@ def cmd_verify_ig() -> None:
     if not result["publishing_configured"]:
         print("   Hinweis:    PUBLIC_MEDIA_BASE_URL/PUBLIC_MEDIA_DIR fehlen noch "
               "(für echtes Posten in Slice 2 nötig)")
+
+    # Community edges (Kommentare/DMs/Hashtag-Suche) — nur Edge-Probing ist in der
+    # Instagram-Login-Variante verlässlich, da /me/permissions dort fehlt.
+    from src.community.api import GraphCommunityAPI
+
+    try:
+        probe = asyncio.run(GraphCommunityAPI().probe())
+    except Exception as exc:  # noqa: BLE001 — Diagnose soll nie hart abbrechen
+        probe = None
+        print(f"   Community:  Probe fehlgeschlagen ({type(exc).__name__}: {exc})")
+    if probe is not None:
+        def _mark(ok: bool | None) -> str:
+            return "✅" if ok else "❌ FEHLT"
+        print(f"   DMs:        {_mark(probe['messaging'])} /me/conversations "
+              "(Recht instagram_business_manage_messages + Nachrichten-Zugriff in der IG-App)")
+        print(f"   Hashtags:   {_mark(probe['hashtag_search'])} ig_hashtag_search "
+              "(in der Instagram-Login-Variante oft nicht verfügbar → Digest nutzt Fallback)")
 
 
 def cmd_milestone(followers: int | None = None) -> None:
@@ -302,6 +341,7 @@ async def _run_loop() -> None:
 
     done_slots: set[tuple[str, str]] = set()  # (date, HH:MM) already handled
     last_generate = 0.0
+    last_community_poll = 0.0
 
     try:
         while True:
@@ -436,6 +476,28 @@ async def _run_loop() -> None:
                 if publishing_configured():
                     await _fetch_daily_insights()
 
+            # 7) community: poll comments (+ DMs) on an interval, digest once daily.
+            #    LLM work inside the pollers runs via asyncio.to_thread, so the tick
+            #    and the Telegram poller stay responsive.
+            if config.COMMUNITY_ENABLED:
+                loop_now = asyncio.get_event_loop().time()
+                if loop_now - last_community_poll >= config.COMMUNITY_POLL_MINUTES * 60:
+                    last_community_poll = loop_now
+                    from src.community.comments import poll_comments
+
+                    await poll_comments()
+                    if config.COMMUNITY_DM_ENABLED:
+                        from src.community.dms import poll_dms
+
+                        await poll_dms()
+                if (config.COMMUNITY_DIGEST_ENABLED
+                        and hhmm == config.COMMUNITY_DIGEST_SLOT
+                        and (slot_key[0], "digest") not in done_slots):
+                    done_slots.add((slot_key[0], "digest"))
+                    from src.community.digest import build_digest
+
+                    await build_digest()
+
             await asyncio.sleep(_LOOP_TICK_S)
     finally:
         if telegram_app is not None:
@@ -471,6 +533,7 @@ def main() -> None:
     milestone.add_argument("--followers", type=int, default=None,
                            help="Follower-Zahl vorgeben statt sie von der API zu holen")
     sub.add_parser("verify-ig")
+    sub.add_parser("community")
     sub.add_parser("run")
     sub.add_parser("status")
     publish = sub.add_parser("publish")
@@ -498,6 +561,8 @@ def main() -> None:
         cmd_milestone(args.followers)
     elif args.command == "verify-ig":
         cmd_verify_ig()
+    elif args.command == "community":
+        cmd_community()
     elif args.command == "run":
         asyncio.run(_run_loop())
     elif args.command == "status":

@@ -133,10 +133,26 @@ def builtin_fake() -> "FakeLLM":
         {"slug": f"thema-{i}", "title": f"Beispiel-Thema {i}", "brief": "Kurzer Brief mit Entscheidungslogik."}
         for i in range(1, 8)
     ]})
+    # Community: classify a batch of comments (harmless auto-reply by default).
+    community_comments = json.dumps([
+        {"i": i, "class": "harmless", "confidence": 0.9,
+         "reply": "Danke dir 🙌 Welches Thema wünschst du dir als Nächstes?"}
+        for i in range(20)
+    ])
+    community_dm = json.dumps(
+        {"class": "harmless", "confidence": 0.9,
+         "reply": "Danke für deine Nachricht 🙌 Wie kann ich dir weiterhelfen?"}
+    )
+    community_digest = json.dumps([
+        {"i": i, "comment": "Spannender Beitrag 🙌 Wie siehst du das mittelfristig?"}
+        for i in range(10)
+    ])
     return FakeLLM({
         "score_trends": scores, "generate_script": script,
         "stock_analysis": stock_analysis, "feed_post": feed_post,
         "trend_ticker": trend_ticker, "week_plan": week_plan,
+        "community_comments": community_comments, "community_dm": community_dm,
+        "community_digest": community_digest,
     })
 
 

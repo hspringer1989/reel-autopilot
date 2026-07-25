@@ -45,6 +45,36 @@ die Affiliate-Anmeldungen (Schritt 5) haben Prüf-Vorlauf, daher früh starten.
 > Berechtigungen dann `instagram_basic`, `instagram_content_publish`,
 > `instagram_manage_insights`, `pages_show_list`.
 
+## 2b. Community-Automatisierung freischalten (DMs + Kommentare)
+
+Für die Auto-Antworten auf Kommentare/DMs braucht der Token **zwei zusätzliche
+Berechtigungen** über die drei aus Schritt 2 hinaus:
+
+1. In der Meta-App unter **Instagram → API setup with Instagram business login**
+   zusätzlich `instagram_business_manage_comments` und
+   `instagram_business_manage_messages` autorisieren, dann den **Long-Lived-Token
+   neu generieren** und `IG_ACCESS_TOKEN` auf dem Server tauschen.
+2. **In der Instagram-App** (nicht im Meta-Portal!): Einstellungen → Nachrichten →
+   „Verbundene Tools/Zugriff auf Nachrichten zulassen" aktivieren. Ohne diesen
+   Schalter liefert `/me/conversations` still eine Fehlermeldung — häufigste
+   Ursache, wenn DMs nicht ankommen.
+3. Prüfen mit `python main.py verify-ig`: die Zeilen **DMs** und **Hashtags** zeigen
+   an, welche Community-Edges der Token kann. (Die Rechte lassen sich in der
+   Instagram-Login-Variante nicht auflisten — nur das Probing der echten Endpunkte
+   ist verlässlich.) Hashtag-Suche ist auf diesem Weg meist **nicht** verfügbar;
+   der Engagement-Digest fällt dann automatisch auf Profil-/Themen-Links zurück.
+4. Aktivierung gestuft über `.env` (Details in `CLAUDE.md` → Community):
+   `COMMUNITY_ENABLED=true` + `COMMUNITY_SHADOW_MODE=true` starten (Phase 1: nur
+   klassifizieren + per Telegram melden, kein Posten). Nach ~1 Woche Prüfung
+   `COMMUNITY_SHADOW_MODE=false`; DMs separat via `COMMUNITY_DM_ENABLED=true`,
+   Digest via `COMMUNITY_DIGEST_ENABLED=true`.
+
+> Solange nur das eigene Konto bespielt wird, reicht weiter der Entwicklermodus.
+> Kommentare/DMs werden nur auf **eigenen** Beiträgen bzw. eingehenden Nachrichten
+> beantwortet — es gibt bewusst **kein** automatisches Kommentieren/Liken/Folgen auf
+> fremden Profilen (nicht über die offizielle API möglich, ToS-Verstoß). Dafür dient
+> der halbautomatische Engagement-Digest zum manuellen Abarbeiten.
+
 ## 3. Dienste-Accounts
 
 | Dienst | Wo | .env-Schlüssel | Kosten |

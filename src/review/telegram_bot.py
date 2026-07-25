@@ -6,7 +6,13 @@ from pathlib import Path
 from loguru import logger
 from sqlalchemy import select
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 import config
 from src.storage.database import FeedPostRow, ReelRow, StoryRow, session_scope
@@ -189,9 +195,101 @@ def apply_feed_decision(post_id: int, action: str) -> str | None:
     return ack
 
 
+# ── Community: comment + DM escalation ─────────────────────────────────────
+def _comment_keyboard(comment_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Antworten", callback_data=f"cmt:approve:{comment_id}"),
+        InlineKeyboardButton("❌ Überspringen", callback_data=f"cmt:skip:{comment_id}"),
+        InlineKeyboardButton("🙈 Verbergen", callback_data=f"cmt:hide:{comment_id}"),
+    ]])
+
+
+def _dm_keyboard(dm_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Senden", callback_data=f"dm:approve:{dm_id}"),
+        InlineKeyboardButton("❌ Überspringen", callback_data=f"dm:skip:{dm_id}"),
+    ]])
+
+
+async def send_comment_for_review(
+    comment_id: int, author: str, comment_text: str, media_context: str, suggestion: str
+) -> int | None:
+    """Escalate a comment to Telegram with an editable reply suggestion. Returns the
+    Telegram message id (stored so a reply-to-message can drive the edit flow)."""
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"💬 Kommentar von @{author} unter „{media_context[:60]}“:\n"
+        f"„{comment_text}“\n\n"
+        f"Vorschlag: {suggestion or '(kein Entwurf — bitte selbst formulieren)'}\n\n"
+        "↩️ Zum Anpassen einfach auf diese Nachricht antworten."
+    )
+    async with bot:
+        msg = await bot.send_message(
+            chat_id=config.TELEGRAM_CHAT_ID, text=text[:4096],
+            reply_markup=_comment_keyboard(comment_id),
+        )
+    return msg.message_id
+
+
+async def send_dm_for_review(
+    dm_id: int, username: str, dm_text: str, context: str, suggestion: str,
+    window_open: bool = True,
+) -> int | None:
+    """Escalate a DM to Telegram. `window_open=False` warns that the 24h reply
+    window has closed (a reply would be rejected by Instagram)."""
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    warn = "" if window_open else "\n⚠️ 24h-Antwortfenster geschlossen — Antwort ggf. nicht zustellbar."
+    ctx = f"\nVerlauf:\n{context}\n" if context else "\n"
+    text = (
+        f"✉️ DM von @{username}:\n„{dm_text}“{ctx}"
+        f"Vorschlag: {suggestion or '(kein Entwurf — bitte selbst formulieren)'}{warn}\n\n"
+        "↩️ Zum Anpassen einfach auf diese Nachricht antworten."
+    )
+    async with bot:
+        msg = await bot.send_message(
+            chat_id=config.TELEGRAM_CHAT_ID, text=text[:4096],
+            reply_markup=_dm_keyboard(dm_id),
+        )
+    return msg.message_id
+
+
+async def _finish_callback(query, note: str) -> None:
+    """Strip buttons and append the outcome note to the reviewed message."""
+    msg = query.message
+    if msg.caption is not None:  # photo message (reel/story)
+        await query.edit_message_caption(
+            caption=f"{msg.caption}\n\n{note}"[:1024], reply_markup=None
+        )
+    else:  # text message (feed/community prompt)
+        await query.edit_message_text(
+            text=f"{msg.text or ''}\n\n{note}"[:4096], reply_markup=None
+        )
+
+
 async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
+    # Community comment/DM decisions post immediately (or skip/hide) via the
+    # community pipelines, then annotate the message. Handled up front and returned.
+    if query.data.startswith(("cmt:", "dm:")):
+        try:
+            prefix, action, raw_id = query.data.split(":", 2)
+            item_id = int(raw_id)
+        except (ValueError, AttributeError):
+            await _finish_callback(query, "⚠️ Unbekannte Aktion")
+            return
+        if prefix == "cmt":
+            from src.community import comments as community_comments
+
+            ack = await community_comments.resolve_review(item_id, action)
+        else:
+            from src.community import dms as community_dms
+
+            ack = await community_dms.resolve_review(item_id, action)
+        await _finish_callback(query, ack or "⚠️ Unbekannte Aktion")
+        return
+
     kind, action, item_id, ack = None, None, None, None
     try:
         if query.data.startswith("story:"):
@@ -208,16 +306,7 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             ack = apply_decision(item_id, action)
     except (ValueError, AttributeError):
         ack = None
-    msg = query.message
-    note = ack or "⚠️ Unbekannte Aktion"
-    if msg.caption is not None:  # photo message (reel/story)
-        await query.edit_message_caption(
-            caption=f"{msg.caption}\n\n{note}"[:1024], reply_markup=None
-        )
-    else:  # text message (feed-post review prompt)
-        await query.edit_message_text(
-            text=f"{msg.text or ''}\n\n{note}"[:4096], reply_markup=None
-        )
+    await _finish_callback(query, ack or "⚠️ Unbekannte Aktion")
 
     # On approval a feed post publishes IMMEDIATELY (+ announcement story) — UNLESS it has
     # a future scheduled_at, in which case the scheduler posts it at that time.
@@ -242,8 +331,32 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
 
 
+async def _on_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Edit flow: replying (Telegram "Reply") to a community escalation with custom
+    text posts THAT text as the comment/DM reply. Restricted to the review chat."""
+    msg = update.message
+    if msg is None or msg.reply_to_message is None:
+        return
+    if str(msg.chat_id) != str(config.TELEGRAM_CHAT_ID):
+        return
+    target_tg_id = str(msg.reply_to_message.message_id)
+    custom = (msg.text or "").strip()
+    if not custom:
+        return
+
+    from src.community import comments as community_comments
+    from src.community import dms as community_dms
+
+    ack = await community_comments.resolve_edit(target_tg_id, custom)
+    if ack is None:
+        ack = await community_dms.resolve_edit(target_tg_id, custom)
+    if ack is not None:
+        await msg.reply_text(ack)
+
+
 def build_application() -> Application:
     """Polling application for `python main.py run` — processes review buttons."""
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CallbackQueryHandler(_on_callback))
+    app.add_handler(MessageHandler(filters.TEXT & filters.REPLY, _on_reply))
     return app
