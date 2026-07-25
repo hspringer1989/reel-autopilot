@@ -20,10 +20,7 @@ from src.content.llm import BudgetExceeded, LLMProvider, get_llm, parse_json_res
 from src.storage.database import DigestItemRow, session_scope
 
 _MAX_MEDIA_PER_HASHTAG = 3
-_DIGEST_SYSTEM = """Du hilfst dem Finanz-Instagram-Profil {brand}, unter fremden Beiträgen \
-sinnvoll zu kommentieren. Schlage je Beitrag EINEN kurzen, freundlichen deutschen Kommentar \
-vor (1 Satz, wertschätzend, endet mit einer Frage, KEINE Anlageberatung, 1 Emoji ok).
-Antworte AUSSCHLIESSLICH als JSON-Array: [{"i": 0, "comment": "…"}]."""
+_DIGEST_SYSTEM = config.PROFILE.DIGEST_SYSTEM_PROMPT
 
 
 def _todays_hashtags() -> list[str]:

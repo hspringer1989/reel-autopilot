@@ -49,7 +49,7 @@ def _new_card():
 
 
 def _footer(draw) -> None:
-    disclaimer = "Keine Anlageberatung · keine Kauf-/Verkaufsempfehlung · Werbung"
+    disclaimer = config.PROFILE.CARD_FOOTER_DISCLAIMER
     draw.line((60, H - 150, W - 60, H - 150), fill=_MUTED, width=2)
     draw.text((60, H - 130), disclaimer, font=_font(26), fill=_MUTED)
 
@@ -419,7 +419,7 @@ def render_analysis_card(c: Candidate, out_path: str) -> str:
     body_fill = _BRAND if c.trend_reason else _INK_SOFT
     _draw_fit(draw, body, (250, yy + 6, W - 76, y + fzh - 22), body_fill, 30, 22)
 
-    draw.text((44, H - 62), "Keine Anlageberatung · keine Kauf-/Verkaufsempfehlung · Werbung",
+    draw.text((44, H - 62), config.PROFILE.CARD_FOOTER_DISCLAIMER,
               font=_font(24), fill=_MUTED)
     return _save(img, out_path)
 
@@ -562,10 +562,10 @@ def _truncate_px(draw, text: str, font, maxw: int) -> str:
 
 
 def _brandmark(draw, x: int, y: int) -> None:
-    """Small radar icon + 'RENDITE RADAR' wordmark (dark, on the light template)."""
+    """Small radar icon + channel wordmark (dark, on the light template)."""
     draw.ellipse((x, y, x + 50, y + 50), outline=_LT_INK, width=5)
     draw.ellipse((x + 30, y + 8, x + 46, y + 24), fill=_BRAND)
-    draw.text((x + 70, y + 8), "RENDITE RADAR", font=_font(34, bold=True), fill=_LT_INK)
+    draw.text((x + 70, y + 8), config.PROFILE.WORDMARK, font=_font(34, bold=True), fill=_LT_INK)
 
 
 def _pill_right(draw, right_x: int, y: int, text: str, bg, fg, fsize: int = 28) -> int:
@@ -588,7 +588,7 @@ def _dark_badge(draw, x: int, y: int, market: str) -> int:
 
 
 def _lt_footer(draw) -> None:
-    draw.text((44, H - 62), "Keine Anlageberatung · keine Kauf-/Verkaufsempfehlung · Werbung",
+    draw.text((44, H - 62), config.PROFILE.CARD_FOOTER_DISCLAIMER,
               font=_font(20), fill=_LT_GREY)
     hf = _font(22, bold=True)
     draw.text((W - 44 - draw.textlength(config.BRAND_HANDLE, font=hf), H - 63),
@@ -767,7 +767,7 @@ def render_milestone_story(milestone: int, next_milestone: int, out_path: str) -
     _center(draw, "Ihr seid die Besten!", _font(64, bold=True), 850, _LT_INK)
     _center(draw, "Danke für euer Vertrauen, jedes Like und jede Nachricht.",
             _font(34), 952, _LT_GREY)
-    _center(draw, "Ihr macht Rendite Radar zu dem, was es ist.",
+    _center(draw, config.PROFILE.MILESTONE_TAGLINE,
             _font(34), 1000, _LT_GREY)
 
     # progress card towards the next goal
@@ -807,7 +807,7 @@ def render_milestone_story(milestone: int, next_milestone: int, out_path: str) -
            (750, 1678), (900, 1712), (1080, 1620)]
     draw.polygon(pts + [(W, H), (0, H)], fill=_LT_CARD)
     draw.line(pts, fill=_BRAND, width=6)
-    draw.text((44, H - 62), "Keine Anlageberatung · Danke fürs Dabeisein",
+    draw.text((44, H - 62), config.PROFILE.MILESTONE_FOOTER,
               font=_font(22), fill=_LT_GREY)
     hf = _font(22, bold=True)
     draw.text((W - 44 - draw.textlength(config.BRAND_HANDLE, font=hf), H - 63),

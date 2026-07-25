@@ -1,21 +1,24 @@
-"""Shared Renditeradar brand palette + Pillow helpers for story cards and feed posts.
+"""Shared brand palette + Pillow helpers for story cards and feed posts.
 
-Brand look (from the Claude-Design templates in assets/templates/): blue accent
-(#2386D1) on a dark background, white text. Traffic-light colours (green/amber/red)
-stay reserved for the SIGNAL meaning (bullish/neutral/bearish) and are not the brand
-accent."""
+The palette itself is channel-specific and lives in the active channel profile
+(config.PROFILE.PALETTE); this module re-exports it under the established names so
+all renderers stay unchanged. Traffic-light colours (green/amber/red) stay reserved
+for the SIGNAL meaning (bullish/neutral/bearish) and are not the brand accent."""
 from __future__ import annotations
 
 import textwrap
 
-# ── Brand palette ──────────────────────────────────────────────────────────
-BLUE = (35, 134, 209)        # #2386D1 — primary brand accent (headers, badges, lines)
-BLUE_LIGHT = (125, 185, 232)  # secondary blue (EU badge, SMA overlay)
-BLUE_DEEP = (6, 74, 126)
-BG = (12, 36, 64)            # dark logo-blue background (#0C2440) — brand blue-on-dark
-CARD = (24, 54, 90)          # slightly lifted blue panel (#1A365A)
-FG = (238, 242, 245)
-MUTED = (150, 165, 175)
+import config
+
+# ── Brand palette (from the channel profile) ───────────────────────────────
+_P = config.PROFILE.PALETTE
+BLUE = _P["BLUE"]            # primary brand accent (headers, badges, lines)
+BLUE_LIGHT = _P["BLUE_LIGHT"]  # secondary accent (EU badge, SMA overlay)
+BLUE_DEEP = _P["BLUE_DEEP"]
+BG = _P["BG"]                # dark background
+CARD = _P["CARD"]            # slightly lifted panel
+FG = _P["FG"]
+MUTED = _P["MUTED"]
 
 # ── Traffic-light (semantic signal, NOT brand accent) ──────────────────────
 GREEN = (34, 197, 94)

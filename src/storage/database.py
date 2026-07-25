@@ -109,64 +109,9 @@ class FeedPostRow(Base):
     published_at: Mapped[str] = mapped_column(String(40), default="")
 
 
-# Seed backlog: the first two are the user's requested launch posts, then evergreen ideas.
-_FEED_TOPIC_SEED = [
-    ("strategie-auswahl", "Wie wir Aktien für unsere Analysen auswählen",
-     "Erkläre die Auswahl-Strategie fundiert und einfach: Kombination aus CHARTTECHNIK "
-     "(Trendstruktur über SMA20/50, RSI-Bänder 45-65 gesund) und FUNDAMENTALDATEN (KGV, "
-     "Umsatzwachstum, Gewinnmarge). Blended-Score 50% Chart + 50% Fundamental, Auswahl der "
-     "Top-Titel über VERSCHIEDENE Branchen (Diversifikation). Risiko-/Zielmarken aus dem ATR "
-     "(2x/4x). Ampel grün/gelb/rot = bullisch/neutral/bärisch, rein beobachtend. "
-     "Betone: datenbasiert, transparent, KEINE Anlageberatung."),
-    ("trading-bot-claude-code",
-     "Live-Trading-Bot mit Claude Code bauen & ans Echtgeld-Depot anschließen",
-     "SEHR DETAILLIERTE, umsetzbare Schritt-für-Schritt-Anleitung (8-10 Slides), sodass "
-     "Leser einen echten Live-Trading-Bot selbst nachbauen können. Nutze diese konkreten "
-     "Bausteine eines realen Projekts, je Schritt konkret werden: "
-     "1) VORAUSSETZUNGEN: Broker mit API (z.B. Interactive Brokers), Anthropic-API-Key, "
-     "Python 3.12, Claude Code installiert, Grundkenntnisse Python. "
-     "2) PROJEKT-SETUP mit Claude Code: Repo + venv anlegen, Pakete ib_insync, yfinance, "
-     "anthropic, SQLAlchemy, loguru; Claude Code die Struktur generieren lassen. "
-     "3) STRATEGIE definieren: was wird gehandelt (US/EU-Aktien), Signalquellen, Zeithorizont, "
-     "klare Ein-/Ausstiegsregeln. "
-     "4) MARKTDATEN: Kurse & Fundamentaldaten via yfinance, Indikatoren SMA20/50, RSI, ATR "
-     "berechnen. "
-     "5) SIGNAL-ANALYSE MIT CLAUDE: Kennzahlen/News an Claude geben, strukturierte Antwort "
-     "(Ticker, Richtung, Konfidenz) als JSON; Blended-Score aus Technik + Fundamental (+ Sentiment). "
-     "6) RISK-MANAGEMENT: Position-Sizing (% des Kapitals), Stop-Loss & Take-Profit als "
-     "ATR-Bracket, max. offene Positionen, Tagesverlust-Limit (Circuit-Breaker). "
-     "7) BROKER ANBINDEN: IBKR TWS/Gateway starten, ib_insync verbindet auf Port 4002 (Paper) "
-     "bzw. 4001 (Live); OCA-Bracket-Order = Market-Entry + Stop + Take-Profit (GTC). "
-     "8) IMMER ZUERST PAPER-TRADING: Wochen testen, Expectancy prüfen, Bugs finden. "
-     "9) LIVE SCHALTEN: Port auf Live, mit KLEINEM Kapital starten. "
-     "10) BETRIEB: Trades in SQLite loggen, als systemd-Service dauerhaft laufen, Claude-Budget "
-     "deckeln. "
-     "DEUTLICHE RISIKO-WARNUNG (eigene Slide): echtes Geld, Totalverlust möglich, keine "
-     "Gewinngarantie, ein Bot ersetzt kein Fachwissen. KEINE Anlageberatung. Ton: motivierend, "
-     "ehrlich, technisch konkret."),
-    ("etf-basics", "ETFs einfach erklärt: der bequeme Einstieg",
-     "Was ist ein ETF, wie funktioniert Streuung, TER/Kosten, thesaurierend vs. ausschüttend, "
-     "Sparplan-Idee. Einfach, edukativ, keine Empfehlung."),
-    ("kgv-erklaert", "Das KGV: wie teuer ist eine Aktie wirklich?",
-     "KGV = Kurs-Gewinn-Verhältnis einfach erklärt, was hoch/niedrig bedeutet, Grenzen der "
-     "Kennzahl, Branchenunterschiede. Edukativ."),
-    ("rsi-erklaert", "RSI: das Fieberthermometer für Aktien",
-     "RSI erklärt: Schwungkraft-Maß, überkauft >70 / überverkauft <30, gesunder Bereich, "
-     "warum kein Signal allein reicht. Edukativ."),
-    ("stop-loss", "Stop-Loss: wie man Verluste begrenzt",
-     "Stop-Loss-Prinzip, ATR-basierte Marken, warum Risikomanagement wichtiger ist als das "
-     "perfekte Einstiegssignal. Edukativ."),
-    ("diversifikation", "Warum Streuung dein bester Freund ist",
-     "Diversifikation über Branchen/Regionen, Klumpenrisiko, Beispiel. Edukativ."),
-    ("zinseszins", "Zinseszins: der stille Vermögens-Booster",
-     "Zinseszins-Effekt, Zeit als Hebel, einfaches Rechenbeispiel. Edukativ."),
-    ("anlegerfehler", "5 Fehler, die Anfänger an der Börse machen",
-     "Häufige Fehler: Panikverkäufe, Market-Timing, Klumpenrisiko, Gebühren ignorieren, kein "
-     "Plan. Edukativ, mit Augenzwinkern."),
-    ("earnings-season", "Earnings-Season: worauf es bei Quartalszahlen ankommt",
-     "Was Quartalszahlen sind, EPS/Umsatz/Guidance, warum Kurse trotz guter Zahlen fallen "
-     "können. Edukativ."),
-]
+# Seed backlog comes from the channel profile (seeding is idempotent by slug, so an
+# existing DB is never re-seeded with another channel's topics).
+_FEED_TOPIC_SEED = config.PROFILE.FEED_TOPIC_SEED
 
 
 class MetricRow(Base):

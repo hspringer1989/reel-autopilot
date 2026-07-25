@@ -42,12 +42,7 @@ def recent_titles(limit: int = 40) -> list[str]:
         ).all() if t]
 
 
-_PROPOSE_SYSTEM = """Du bist Redakteur für das deutsche Instagram-Finanz-Bildungsprofil \
-"Renditeradar" (datenbasiert, Ampel aus Charttechnik + Fundamental; Zielgruppe: FORTGESCHRITTENE \
-Privatanleger, kein Anfänger-Basic). Schlage reichweitenstarke Beitragsthemen vor — \
-abwechslungsreiche Formate (Erklär-Carousel, Listen/Rankings, Mythen-Check, anwendbare How-tos, \
-Strategie), fortgeschrittener Ton, immer mit Anwendbarkeit/Entscheidungslogik.
-Verwende korrekte deutsche Umlaute. Antworte AUSSCHLIESSLICH mit gültigem JSON."""
+_PROPOSE_SYSTEM = config.PROFILE.EDITORIAL_SYSTEM_PROMPT
 
 _PROPOSE_USER = """Schlage {n} Beitragsthemen für die kommende Woche vor (ein Beitrag pro Tag).
 Vermeide diese kürzlich behandelten Themen: {avoid}
