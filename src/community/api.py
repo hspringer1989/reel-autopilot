@@ -88,7 +88,14 @@ class GraphCommunityAPI(CommunityAPI):
         async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
             body = (await client.get(f"{_base()}/{media_id}/comments", params=params)).json()
         if "data" not in body:
-            logger.warning(f"Kommentare für {media_id} nicht abrufbar: {body.get('error', body)}")
+            err = body.get("error", {})
+            # A media object that no longer exists (user deleted the post) or has no
+            # comments edge returns code 100 / subcode 33 — expected, log at debug so a
+            # single stale id does not spam a warning every poll cycle. Real errors warn.
+            if err.get("code") == 100 and err.get("error_subcode") == 33:
+                logger.debug(f"Kommentare für {media_id} nicht verfügbar (Medium gelöscht/ohne Kommentar-Objekt)")
+            else:
+                logger.warning(f"Kommentare für {media_id} nicht abrufbar: {err or body}")
             return []
         return [_normalise_comment(c) for c in body["data"]]
 
