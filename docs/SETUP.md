@@ -3,6 +3,10 @@
 Diese Schritte kann nur der Betreiber selbst erledigen. Reihenfolge beachten —
 die Affiliate-Anmeldungen (Schritt 5) haben Prüf-Vorlauf, daher früh starten.
 
+> **Neuer Kanal auf der gemeinsamen Engine?** Erst `docs/ONBOARDING.md` lesen
+> (Kanal-Profil unter `channels/<name>/`, eigene `.env` mit `CHANNEL=<name>`) —
+> die Konto-/API-Schritte hier gelten dann für DEIN Konto und DEINE Keys.
+
 ## 1. Instagram-Profil anlegen
 
 1. Neues Instagram-Konto erstellen (App: "Konto hinzufügen" → "Neues Konto erstellen",

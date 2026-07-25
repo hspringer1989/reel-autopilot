@@ -200,7 +200,7 @@ STORY_SLOTS_US = _get_list("STORY_SLOTS_US", "16:00,18:30,20:30")
 
 # ── Follower milestones ────────────────────────────────────────────────────
 # When the account crosses one of these follower marks, a milestone thank-you
-# story (design: assets/templates/story-meilenstein.png) goes to Telegram review
+# story (design: channels/<CHANNEL>/assets/templates/story-meilenstein.png) goes to Telegram review
 # and is posted immediately after approval (src/milestones.py). Checked daily.
 FOLLOWER_MILESTONES = sorted(int(x) for x in _get_list(
     "FOLLOWER_MILESTONES", "100,200,500,1000,2500,5000,10000,25000,50000,100000"))
