@@ -64,7 +64,7 @@ def test_persist_trend_cards():
     pytest.importorskip("PIL")
     c = build_candidate_for_ticker(FakeMarketData(), "XOM", builtin_fake(), category="TREND-AKTIE")
     ids = _persist_candidate_cards(c, Path(config.STORY_DIR), _TODAY, kind="trend")
-    assert len(ids) == 3
+    assert len(ids) == 1  # one combined card per stock
     with session_scope() as session:
         assert all(session.get(StoryRow, i).kind == "trend" for i in ids)
 
