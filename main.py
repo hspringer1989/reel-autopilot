@@ -5,6 +5,7 @@
   python main.py stocks             # build today's earnings + watchlist stories → review
   python main.py feedpost           # generate the next educational feed carousel → review
   python main.py dividendpost       # build the monthly-dividend post (yield + 2 lights) → review
+  python main.py milestone          # check follower count; new milestone card → review
   python main.py verify-ig          # read-only check of the IG token/account/permissions
   python main.py run                # scheduler loop: review bot + slots + insights
   python main.py publish --reel 3   # manually publish a specific reel
@@ -167,6 +168,18 @@ def cmd_verify_ig() -> None:
               "(für echtes Posten in Slice 2 nötig)")
 
 
+def cmd_milestone(followers: int | None = None) -> None:
+    """Check the follower count now; a newly crossed milestone goes to Telegram review."""
+    from src.milestones import check_follower_milestone
+
+    sid = asyncio.run(check_follower_milestone(followers))
+    if sid is None:
+        print("Kein neuer Meilenstein erreicht (oder Follower-Abruf nicht möglich)")
+    else:
+        print(f"Meilenstein-Story #{sid} wartet in Telegram auf Freigabe — "
+              "nach ✅ postet der Scheduler sie sofort")
+
+
 def cmd_post_story(story_id: int) -> None:
     from src.publish.instagram import publish_story
     from src.storage.database import StoryRow
@@ -266,6 +279,7 @@ async def _run_loop() -> None:
         publish_next_feed_post,
         send_feed_for_review,
     )
+    from src.milestones import check_follower_milestone, publish_approved_milestones
     from src.stocks.pipeline import (
         build_daily_stories,
         publish_next_candidate_group,
@@ -353,6 +367,18 @@ async def _run_loop() -> None:
                                 f"📤 Trend-Aktien-Story ({market}, {len(trend)} Cards) gepostet."
                             )
 
+            # 4b) follower milestones: daily check at the morning build slot; an
+            #     approved milestone card posts IMMEDIATELY on the next tick
+            #     (a thank-you story shouldn't wait for a stock-story slot).
+            if (publishing_configured() and hhmm == config.STOCK_STORY_SLOT
+                    and (slot_key[0], "milestone_check") not in done_slots):
+                done_slots.add((slot_key[0], "milestone_check"))
+                await check_follower_milestone()
+            if publishing_configured():
+                for sid in await publish_approved_milestones():
+                    if review_configured():
+                        await send_text(f"📤 Meilenstein-Story #{sid} wurde gepostet.")
+
             # 5) feed posts (2×/week): generate on a feed-slot day at the morning build
             #    tick, post at the exact slot time (weekday + HH:MM).
             feed_today = _feed_slots_today(now)
@@ -430,6 +456,9 @@ def main() -> None:
     stockreel.add_argument("--ticker", required=True)
     stockreel.add_argument("--topic", default="")
     sub.add_parser("dividendpost")
+    milestone = sub.add_parser("milestone")
+    milestone.add_argument("--followers", type=int, default=None,
+                           help="Follower-Zahl vorgeben statt sie von der API zu holen")
     sub.add_parser("verify-ig")
     sub.add_parser("run")
     sub.add_parser("status")
@@ -454,6 +483,8 @@ def main() -> None:
         cmd_stockreel(args.ticker, args.topic)
     elif args.command == "dividendpost":
         cmd_dividendpost()
+    elif args.command == "milestone":
+        cmd_milestone(args.followers)
     elif args.command == "verify-ig":
         cmd_verify_ig()
     elif args.command == "run":

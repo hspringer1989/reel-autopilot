@@ -703,3 +703,88 @@ def render_candidates_overview_card(candidates: list[Candidate], out_path: str) 
             break
     _lt_footer(draw)
     return _save(img, out_path)
+
+
+# ── Milestone story (template "story-meilenstein") ─────────────────────────
+def _de_num(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+def render_milestone_story(milestone: int, next_milestone: int, out_path: str) -> str:
+    """Follower-milestone thank-you card in the light template design: big number,
+    progress bar towards the next goal, share prompt. All numbers are dynamic so
+    the same card works for 100, 200, 1.000 … followers."""
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (W, H), _LT_BG)
+    draw = ImageDraw.Draw(img)
+    _brandmark(draw, 60, 172)
+    _pill_right(draw, W - 56, 170, "MEILENSTEIN", _BRAND, (255, 255, 255), 28)
+
+    # confetti accents around the headline block
+    for x, y, r, col in ((150, 430, 10, _BRAND), (935, 400, 8, _LT_GREY),
+                         (115, 690, 8, _LT_GREY), (955, 655, 10, _BRAND)):
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=col)
+    for x, y, col in ((220, 610, _LT_GREY), (870, 520, _BRAND)):
+        draw.line((x - 14, y, x + 14, y), fill=col, width=6)
+        draw.line((x, y - 14, x, y + 14), fill=col, width=6)
+
+    _center(draw, " ".join("WIR HABEN ES GESCHAFFT"), _font(30, bold=True), 316, _LT_GREY)
+
+    num = _de_num(milestone)
+    nf, pf = _font(290, bold=True), _font(120, bold=True)
+    wn, wp = draw.textlength(num, font=nf), draw.textlength("+", font=pf)
+    x0 = (W - wn - wp - 10) / 2
+    draw.text((x0, 372), num, font=nf, fill=_LT_INK)
+    draw.text((x0 + wn + 10, 408), "+", font=pf, fill=_BRAND)
+    _center(draw, "Follower", _font(78, bold=True), 716, _BRAND)
+
+    _center(draw, "Ihr seid die Besten!", _font(64, bold=True), 850, _LT_INK)
+    _center(draw, "Danke für euer Vertrauen, jedes Like und jede Nachricht.",
+            _font(34), 952, _LT_GREY)
+    _center(draw, "Ihr macht Rendite Radar zu dem, was es ist.",
+            _font(34), 1000, _LT_GREY)
+
+    # progress card towards the next goal
+    cy = 1088
+    nxt = _de_num(next_milestone)
+    draw.rounded_rectangle((60, cy, W - 60, cy + 280), radius=28, fill=_LT_CARD)
+    draw.text((110, cy + 46), " ".join("NÄCHSTES ZIEL"), font=_font(26, bold=True), fill=_LT_GREY)
+    gf, sf = _font(60, bold=True), _font(30)
+    wg, ws = draw.textlength(nxt, font=gf), draw.textlength(" Follower", font=sf)
+    draw.text((W - 110 - wg - ws, cy + 30), nxt, font=gf, fill=_BRAND)
+    draw.text((W - 110 - ws, cy + 58), " Follower", font=sf, fill=_LT_GREY)
+    bar_y = cy + 158
+    draw.rounded_rectangle((110, bar_y, W - 110, bar_y + 24), radius=12, fill=_LT_PILL)
+    frac = max(0.06, min(1.0, milestone / max(next_milestone, 1)))
+    draw.rounded_rectangle((110, bar_y, 110 + int((W - 220) * frac), bar_y + 24),
+                           radius=12, fill=_BRAND)
+    draw.text((110, bar_y + 50), f"{num} erreicht", font=_font(26), fill=_LT_GREY)
+    rest = f"Nur noch {_de_num(next_milestone - milestone)} bis {nxt}"
+    rf = _font(26, bold=True)
+    draw.text((W - 110 - draw.textlength(rest, font=rf), bar_y + 50), rest, font=rf, fill=_LT_INK)
+
+    # share prompt (dark card)
+    sy = 1414
+    draw.rounded_rectangle((60, sy, W - 60, sy + 250), radius=28, fill=_CHIP)
+    draw.rounded_rectangle((110, sy + 56, 194, sy + 140), radius=20, fill=_BRAND)
+    ax = 152  # share glyph: arrow up out of a tray
+    draw.line((ax, sy + 78, ax, sy + 116), fill=(255, 255, 255), width=7)
+    draw.polygon([(ax - 14, sy + 90), (ax + 14, sy + 90), (ax, sy + 68)], fill=(255, 255, 255))
+    draw.line((132, sy + 126, 172, sy + 126), fill=(255, 255, 255), width=7)
+    draw.text((232, sy + 52), "Teilt diese Story!", font=_font(44, bold=True), fill=(255, 255, 255))
+    _wrap_px(draw, "Sendet den Kanal an jemanden, der Aktienanalysen liebt – "
+             f"gemeinsam knacken wir die {nxt}.",
+             _font(30), 232, sy + 122, W - 110, (176, 184, 196), 42)
+
+    # bottom chart silhouette + footer
+    pts = [(0, 1812), (150, 1768), (300, 1798), (450, 1726), (600, 1756),
+           (750, 1678), (900, 1712), (1080, 1620)]
+    draw.polygon(pts + [(W, H), (0, H)], fill=_LT_CARD)
+    draw.line(pts, fill=_BRAND, width=6)
+    draw.text((44, H - 62), "Keine Anlageberatung · Danke fürs Dabeisein",
+              font=_font(22), fill=_LT_GREY)
+    hf = _font(22, bold=True)
+    draw.text((W - 44 - draw.textlength(config.BRAND_HANDLE, font=hf), H - 63),
+              config.BRAND_HANDLE, font=hf, fill=_LT_INK)
+    return _save(img, out_path)

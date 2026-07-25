@@ -213,6 +213,27 @@ async def publish_feed_post(image_paths: list[str], caption: str) -> str:
     return media_id
 
 
+async def fetch_follower_count() -> int | None:
+    """Current follower count of the configured account; None if unconfigured or
+    the API answers without the field (e.g. token expired)."""
+    if not config.IG_ACCESS_TOKEN or not config.IG_USER_ID:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = (await client.get(
+                f"{config.GRAPH_BASE_URL}/{config.GRAPH_API_VERSION}/{config.IG_USER_ID}",
+                params={"fields": "followers_count", "access_token": config.IG_ACCESS_TOKEN},
+            )).json()
+    except httpx.HTTPError as exc:
+        logger.warning(f"Follower-Abruf fehlgeschlagen: {exc}")
+        return None
+    count = body.get("followers_count")
+    if count is None:
+        logger.warning(f"Follower-Abruf ohne followers_count: {body}")
+        return None
+    return int(count)
+
+
 async def fetch_insights(media_id: str) -> dict[str, int]:
     """Daily metrics for a published reel; empty dict on API errors."""
     metrics = "views,reach,likes,comments,saved,shares"
