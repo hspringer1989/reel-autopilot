@@ -1,6 +1,6 @@
 """Follower-milestone stories: once the account crosses a mark from
 config.FOLLOWER_MILESTONES, a thank-you story card (design:
-assets/templates/story-meilenstein.png) is rendered and queued for Telegram
+channels/<CHANNEL>/assets/templates/story-meilenstein.png) is rendered and queued for Telegram
 review. Approved milestone cards are posted IMMEDIATELY on the next scheduler
 tick — a thank-you shouldn't wait for a stock-story slot.
 

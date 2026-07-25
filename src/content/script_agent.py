@@ -1,5 +1,6 @@
 """Generates the German reel script (Sonnet): hook-first structure, retention
-pacing, CTA — with the compliance rules hard-wired into the system prompt."""
+pacing, CTA — the channel-specific system prompt (tone, domain, compliance) comes
+from the active channel profile."""
 from loguru import logger
 
 import config
@@ -9,34 +10,9 @@ from src.models import ReelScript, ScriptSegment, TrendItem
 # German speech pace ≈ 2.4 words/second — keeps the voiceover inside the target length
 _WORDS_PER_SECOND = 2.4
 
-_DISCLAIMER = "⚠️ Keine Anlageberatung — nur Bildung & Unterhaltung."
+_DISCLAIMER = config.PROFILE.REEL_DISCLAIMER
 
-_SYSTEM_PROMPT = """Du schreibst Voiceover-Skripte für virale deutsche Instagram-Reels \
-eines Finanz-/Investing-Profils. Zielgruppe: 20–45, DACH, finanzinteressiert.
-
-Struktur (Retention-optimiert):
-1. HOOK (erstes Segment, max. 12 Wörter): Schock, Frage oder kontraintuitive Aussage — \
-muss in 2 Sekunden Aufmerksamkeit erzwingen ("Diese 3 Fehler kosten dich 100.000 €...")
-2. 3–5 kurze Segmente: ein Gedanke pro Segment, einfache Sprache, konkrete Zahlen, \
-direkte Ansprache ("du")
-3. Das letzte inhaltliche Segment MUSS ein echtes AHA-ERLEBNIS liefern: eine überraschende, \
-THEMENSPEZIFISCHE Erkenntnis oder kontraintuitive Zahl, die der Zuschauer so noch nicht wusste. \
-VERBOTEN als Standard-Fazit: generische Lektionen wie "Streuung schützt", "Klumpenrisiko \
-vermeiden", "breit diversifizieren" — die kennt die Zielgruppe längst. Grabe stattdessen den \
-einen Fakt aus dem Thema aus, der hängen bleibt.
-4. CTA am Ende: "Folge {brand} für täglich frisches Finanzwissen" (Wortlaut variieren) + \
-"Mehr dazu über den Link in der Bio" (nur wenn thematisch passend)
-
-COMPLIANCE (zwingend, keine Ausnahmen):
-- KEINE Anlageberatung, KEINE Kauf-/Verkaufsempfehlung für einzelne Aktien/Coins
-- Formuliere edukativ/newsbezogen ("Was hinter X steckt"), nicht direktiv ("Kauf jetzt X")
-- Keine Rendite-Versprechen, keine "sicheren" Gewinne
-- Die Caption endet mit dem Disclaimer "{disclaimer}"
-
-Für jedes Segment gib ENGLISCHE Stock-Footage-Suchbegriffe an (2–4 Wörter, visuell konkret, \
-z. B. "stock market chart red", "person counting euro bills").
-
-Antworte AUSSCHLIESSLICH mit einem gültigen JSON-Objekt, kein Fließtext, keine Markdown-Umrandung."""
+_SYSTEM_PROMPT = config.PROFILE.REEL_SYSTEM_PROMPT
 
 _USER_TEMPLATE = """Schreibe ein Reel-Skript zu diesem Trend-Thema:
 
@@ -54,7 +30,7 @@ Gib genau diese JSON-Struktur zurück:
     {{"text": "…", "broll": "…"}}
   ],
   "caption": "Instagram-Caption auf Deutsch, 2-4 Zeilen, mit Disclaimer am Ende",
-  "hashtags": ["#finanzen", "#geld", "…  (8-12 Stück, deutsch+reichweitenstark)"]
+  "hashtags": [{hashtag_hint}]
 }}"""
 
 
@@ -68,6 +44,7 @@ def generate_script(trend: TrendItem, llm: LLMProvider) -> ReelScript | None:
             source=trend.source,
             target_words=target_words,
             target_seconds=config.REEL_TARGET_SECONDS,
+            hashtag_hint=config.PROFILE.REEL_HASHTAG_HINT,
         ),
         model=config.CLAUDE_MODEL,
         max_tokens=1500,
@@ -92,7 +69,7 @@ def generate_script(trend: TrendItem, llm: LLMProvider) -> ReelScript | None:
 
     caption = str(data.get("caption", "")).strip()
     # Compliance safety net: the disclaimer must survive even a sloppy model response
-    if "anlageberatung" not in caption.lower():
+    if config.PROFILE.DISCLAIMER_CHECK not in caption.lower():
         caption = f"{caption}\n\n{_DISCLAIMER}".strip()
 
     hashtags = [

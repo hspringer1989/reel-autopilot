@@ -61,6 +61,8 @@ def cmd_generate() -> None:
 
 
 def cmd_stocks() -> None:
+    if not config.ENABLE_STOCKS:
+        raise SystemExit("Für diesen Kanal deaktiviert (ENABLE_STOCKS=false)")
     from src.stocks.pipeline import build_daily_stories, send_stories_for_review
 
     async def _run() -> list[int]:
@@ -90,6 +92,8 @@ def cmd_feedpost() -> None:
 
 
 def cmd_stockreel(ticker: str, topic: str) -> None:
+    if not config.ENABLE_STOCKS:
+        raise SystemExit("Für diesen Kanal deaktiviert (ENABLE_STOCKS=false)")
     from src.stocks.stock_reel import build_stock_reel
 
     async def _run() -> int | None:
@@ -111,6 +115,8 @@ def cmd_stockreel(ticker: str, topic: str) -> None:
 
 
 def cmd_dividendpost() -> None:
+    if not config.ENABLE_DIVIDEND:
+        raise SystemExit("Für diesen Kanal deaktiviert (ENABLE_DIVIDEND=false)")
     from src.feedposts.dividend import build_dividend_post
     from src.feedposts.pipeline import send_feed_for_review
 
@@ -381,47 +387,48 @@ async def _run_loop() -> None:
                 if published and review_configured():
                     await send_text(f"📤 Reel #{published} wurde gepostet.")
 
-            # 4) daily stock stories: build once at STOCK_STORY_SLOT, then post the
-            #    approved cards at their slots (earnings/overview morning, candidates
-            #    at their market's trading hours).
+            # 4) daily stock stories (ENABLE_STOCKS channels only): build once at
+            #    STOCK_STORY_SLOT, then post the approved cards at their slots
+            #    (earnings/overview morning, candidates at their market's trading hours).
             hhmm = now.strftime("%H:%M")
-            if ((slot_key[0], "stocks_build") not in done_slots
-                    and config.STOCK_STORY_SLOT <= hhmm < _STOCK_BUILD_CATCHUP_UNTIL):
-                done_slots.add((slot_key[0], "stocks_build"))
-                try:
-                    story_ids = await asyncio.to_thread(build_daily_stories)
-                    await send_stories_for_review(story_ids)
-                except Exception as exc:  # noqa: BLE001 — a build failure must never kill the loop
-                    logger.exception(f"Tages-Story-Build fehlgeschlagen: {exc}")
-                    if review_configured():
-                        await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
+            if config.ENABLE_STOCKS:
+                if ((slot_key[0], "stocks_build") not in done_slots
+                        and config.STOCK_STORY_SLOT <= hhmm < _STOCK_BUILD_CATCHUP_UNTIL):
+                    done_slots.add((slot_key[0], "stocks_build"))
+                    try:
+                        story_ids = await asyncio.to_thread(build_daily_stories)
+                        await send_stories_for_review(story_ids)
+                    except Exception as exc:  # noqa: BLE001 — a build failure must never kill the loop
+                        logger.exception(f"Tages-Story-Build fehlgeschlagen: {exc}")
+                        if review_configured():
+                            await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
 
-            if publishing_configured():
-                if hhmm == config.STORY_POST_EARNINGS_SLOT and (slot_key[0], "story_morning") not in done_slots:
-                    done_slots.add((slot_key[0], "story_morning"))
-                    for kinds in (["earnings"], ["candidates"]):
-                        sid = await publish_next_story(kinds=kinds)
-                        if sid and review_configured():
-                            await send_text(f"📤 Story #{sid} wurde gepostet.")
-                for market, slots in (("EU", config.STORY_SLOTS_EU), ("US", config.STORY_SLOTS_US)):
-                    key = (slot_key[0], f"story_{market}_{hhmm}")
-                    if hhmm in slots and key not in done_slots:
-                        done_slots.add(key)
-                        posted = await publish_next_candidate_group(market=market)
-                        trend = await publish_next_candidate_group(market=market, kind="trend")
-                        if posted and review_configured():
-                            await send_text(
-                                f"📤 Kandidaten-Story ({market}, {len(posted)} Cards) gepostet."
-                            )
-                        if trend and review_configured():
-                            await send_text(
-                                f"📤 Trend-Aktien-Story ({market}, {len(trend)} Cards) gepostet."
-                            )
+                if publishing_configured():
+                    if hhmm == config.STORY_POST_EARNINGS_SLOT and (slot_key[0], "story_morning") not in done_slots:
+                        done_slots.add((slot_key[0], "story_morning"))
+                        for kinds in (["earnings"], ["candidates"]):
+                            sid = await publish_next_story(kinds=kinds)
+                            if sid and review_configured():
+                                await send_text(f"📤 Story #{sid} wurde gepostet.")
+                    for market, slots in (("EU", config.STORY_SLOTS_EU), ("US", config.STORY_SLOTS_US)):
+                        key = (slot_key[0], f"story_{market}_{hhmm}")
+                        if hhmm in slots and key not in done_slots:
+                            done_slots.add(key)
+                            posted = await publish_next_candidate_group(market=market)
+                            trend = await publish_next_candidate_group(market=market, kind="trend")
+                            if posted and review_configured():
+                                await send_text(
+                                    f"📤 Kandidaten-Story ({market}, {len(posted)} Cards) gepostet."
+                                )
+                            if trend and review_configured():
+                                await send_text(
+                                    f"📤 Trend-Aktien-Story ({market}, {len(trend)} Cards) gepostet."
+                                )
 
             # 4b) follower milestones: daily check at the morning build slot; an
             #     approved milestone card posts IMMEDIATELY on the next tick
             #     (a thank-you story shouldn't wait for a stock-story slot).
-            if (publishing_configured() and hhmm == config.STOCK_STORY_SLOT
+            if (publishing_configured() and hhmm == config.DAILY_BUILD_SLOT
                     and (slot_key[0], "milestone_check") not in done_slots):
                 done_slots.add((slot_key[0], "milestone_check"))
                 await check_follower_milestone()
@@ -433,7 +440,7 @@ async def _run_loop() -> None:
             # 5) feed posts (2×/week): generate on a feed-slot day at the morning build
             #    tick, post at the exact slot time (weekday + HH:MM).
             feed_today = _feed_slots_today(now)
-            if (feed_today and hhmm == config.STOCK_STORY_SLOT
+            if (feed_today and hhmm == config.DAILY_BUILD_SLOT
                     and (slot_key[0], "feed_build") not in done_slots):
                 done_slots.add((slot_key[0], "feed_build"))
                 with session_scope() as session:

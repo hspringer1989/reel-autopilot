@@ -12,36 +12,11 @@ from src.content.llm import LLMProvider, parse_json_response
 from src.content.usage import claude_budget_exceeded
 from src.models import FeedPost, Slide
 
-_DISCLAIMER = "Keine Anlageberatung · nur Bildung & Unterhaltung · Werbung"
+_DISCLAIMER = config.PROFILE.FEED_DISCLAIMER
 
-_BANNED = ("kaufen sie", "jetzt einsteigen", "garantierte rendite", "sicherer gewinn",
-           "verdopple dein geld")
+_BANNED = config.PROFILE.FEED_BANNED_PHRASES
 
-_SYSTEM_PROMPT = """Du bist Content-Creator für das deutsche Instagram-Finanz-Bildungsprofil \
-"Renditeradar" (Aktien · Analysen · Finanzen). Du schreibst edukative CAROUSEL-Beiträge \
-(mehrere Slides) in EINFACHER, motivierender, aber sachlicher Sprache.
-
-STIL:
-- Slide 1 = starker Hook (Titel + ein Satz, der neugierig macht).
-- Mittlere Slides: je EIN Gedanke, kurze Überschrift + 2–4 knappe Sätze. Konkret, alltagsnah, \
-Fachbegriffe in einem Halbsatz erklärt. Gern Zahlen/Beispiele.
-- Letzte Slide = kurze Zusammenfassung. Ihre ÜBERSCHRIFT bleibt schlicht (z.B. "Zusammenfassung" \
-oder "Kurz gesagt") — NICHT auffordernd wie "Folge uns", denn ein Folgen-Button wird visuell \
-ergänzt. Der Folgen-Hinweis darf einmal knapp im Fließtext stehen.
-- 5–10 Slides. Bei ausführlichen Schritt-für-Schritt-Anleitungen ruhig 8–10 Slides nutzen und \
-je Schritt KONKRET werden (Werkzeuge, Reihenfolge, Fallstricke), damit Leser es nachbauen können.
-
-COMPLIANCE (zwingend, BaFin/MAR):
-- KEINE Anlageberatung, KEINE Kauf-/Verkaufsempfehlung für einzelne Wertpapiere.
-- Keine Rendite-Versprechen, keine "sicheren" Gewinne. Bei Trading/Echtgeld klar auf RISIKO \
-und Verlustmöglichkeit hinweisen.
-- Sachlich, edukativ ("So funktioniert…"), nicht direktiv.
-
-SPRACHE: Verwende korrekte deutsche Umlaute (ä, ö, ü, ß) — NIEMALS Ersatzschreibweisen wie \
-ae, ue, oe, ss (auch dann nicht, wenn im Auftrag/Brief ASCII-Schreibweisen stehen).
-
-WICHTIG für gültiges JSON: in Textwerten KEINE doppelten Anführungszeichen (") und keine \
-Zeilenumbrüche. Antworte AUSSCHLIESSLICH mit gültigem JSON, keine Markdown-Umrandung."""
+_SYSTEM_PROMPT = config.PROFILE.FEED_SYSTEM_PROMPT
 
 _USER_TEMPLATE = """Erstelle einen edukativen Instagram-Carousel-Beitrag.
 
@@ -55,7 +30,7 @@ Gib genau diese JSON-Struktur zurück:
     {{"heading": "kurze Überschrift", "body": "2-4 knappe, einfache Sätze"}}
   ],
   "caption": "Instagram-Caption (2-4 Zeilen) mit Disclaimer am Ende",
-  "hashtags": ["#finanzen", "#aktien", "… 8-12 Stück, deutsch, reichweitenstark"]
+  "hashtags": [{hashtag_hint}]
 }}
 Die erste Slide ist der Hook, die letzte Slide die Zusammenfassung. 5-10 Slides — bei \
 detaillierten Anleitungen lieber mehr und konkreter."""
@@ -79,7 +54,8 @@ def build_feed_post(topic_slug: str, title: str, brief: str, llm: LLMProvider) -
         logger.warning("Claude-Budget erschöpft — kein Feed-Post generiert")
         return None
 
-    user = _USER_TEMPLATE.format(title=title, brief=brief)
+    user = _USER_TEMPLATE.format(title=title, brief=brief,
+                                 hashtag_hint=config.PROFILE.FEED_HASHTAG_HINT)
     data = None
     for attempt in range(2):
         try:
@@ -112,7 +88,7 @@ def build_feed_post(topic_slug: str, title: str, brief: str, llm: LLMProvider) -
     # images can't carry a clickable button).
     if config.BRAND_HANDLE and config.BRAND_HANDLE.lower() not in caption.lower():
         caption = f"{caption}\n\nFolge {config.BRAND_HANDLE} für mehr 📈".strip()
-    if "anlageberatung" not in caption.lower():
+    if config.PROFILE.DISCLAIMER_CHECK not in caption.lower():
         caption = f"{caption}\n\n⚠️ {_DISCLAIMER}".strip()
 
     hashtags = [

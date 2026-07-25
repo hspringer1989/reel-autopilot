@@ -19,6 +19,8 @@ def _fake_llm() -> FakeLLM:
 def _configure(monkeypatch):
     monkeypatch.setattr(config, "STOCK_UNIVERSE", ["AAPL", "JPM", "XOM"])
     monkeypatch.setattr(config, "STOCK_CANDIDATES_COUNT", 3)
+    # keep the earnings calendar offline regardless of the developer's .env
+    monkeypatch.setattr(config, "STOCK_DATA_PROVIDER", "fake")
 
 
 def _build(monkeypatch):
@@ -28,19 +30,18 @@ def _build(monkeypatch):
     return build_daily_stories(FakeMarketData(), _fake_llm())
 
 
-def test_build_creates_earnings_overview_and_three_cards_per_candidate(monkeypatch):
+def test_build_creates_earnings_overview_and_one_card_per_candidate(monkeypatch):
     ids = _build(monkeypatch)
-    # earnings(1) + overview(1) + 3 candidates × 3 cards = 11
-    assert len(ids) == 11
+    # earnings(1) + overview(1) + 3 candidates × 1 combined card = 5
+    assert len(ids) == 5
     with session_scope() as session:
         rows = [session.get(StoryRow, i) for i in ids]
     assert rows[0].kind == "earnings"
     assert rows[1].kind == "candidates"
     cand = rows[2:]
     assert all(r.kind == "candidate" for r in cand)
-    # each candidate contributes exactly the three parts
-    parts = sorted(r.part for r in cand[:3])
-    assert parts == ["chart", "fundamental", "overall"]
+    # each candidate contributes exactly one combined card
+    assert all(r.part == "full" for r in cand)
 
 
 def test_story_cards_are_pending_review_and_written(monkeypatch):
@@ -64,8 +65,8 @@ def test_candidate_decision_cascades_to_whole_ticker(monkeypatch):
         group = [r.id for r in session.execute(
             select(StoryRow).where(StoryRow.ticker == ticker)
         ).scalars().all()]
-    assert len(group) == 3  # chart + fundamental + overall
-    # approving any one card approves all three of that ticker
+    assert len(group) == 1  # one combined card per ticker
+    # approving the card approves the whole ticker group
     assert apply_story_decision(group[0], "approve")
     with session_scope() as session:
         for gid in group:

@@ -110,24 +110,26 @@ def _circle_avatar(path: str, size: int):
 
 
 def _render_wordmark(scale: float = 1.0):
-    """The 'RENDITE / RADAR' two-banner wordmark (dark + light banner, slight tilt),
-    recreated cleanly on transparency — no blue logo background."""
+    """The channel's two-banner wordmark (dark + light banner, slight tilt),
+    recreated cleanly on transparency — no logo background. The two words come
+    from the channel profile (PHOTO_WORDMARK)."""
     from PIL import Image, ImageDraw
 
+    word1, word2 = config.PROFILE.PHOTO_WORDMARK
     f = branding.load_font(int(80 * scale), bold=True)
     pad_x, bh, rad = int(30 * scale), int(100 * scale), int(12 * scale)
     measure = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
-    w1 = int(measure.textlength("RENDITE", font=f)) + 2 * pad_x
-    w2 = int(measure.textlength("RADAR", font=f)) + 2 * pad_x
+    w1 = int(measure.textlength(word1, font=f)) + 2 * pad_x
+    w2 = int(measure.textlength(word2, font=f)) + 2 * pad_x
     off, gap = int(34 * scale), int(8 * scale)
     ty = int(bh / 2 - 52 * scale)
     canvas = Image.new("RGBA", (max(w1, off + w2) + 6, bh * 2 + gap + 6), (0, 0, 0, 0))
     d = ImageDraw.Draw(canvas)
     d.rounded_rectangle((0, 0, w1, bh), radius=rad, fill=(26, 26, 26))
-    d.text((pad_x, ty), "RENDITE", font=f, fill=(255, 255, 255))
+    d.text((pad_x, ty), word1, font=f, fill=(255, 255, 255))
     y2 = bh + gap
     d.rounded_rectangle((off, y2, off + w2, y2 + bh), radius=rad, fill=(244, 244, 244))
-    d.text((off + pad_x, y2 + ty), "RADAR", font=f, fill=(22, 22, 22))
+    d.text((off + pad_x, y2 + ty), word2, font=f, fill=(22, 22, 22))
     return canvas.rotate(4, expand=True, resample=Image.BICUBIC)
 
 

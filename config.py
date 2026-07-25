@@ -17,6 +17,22 @@ def _get_list(name: str, default: str = "") -> list[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+# ── Channel profile ───────────────────────────────────────────────────────
+# One process = one channel. CHANNEL selects channels/<name>/profile.py, which holds
+# everything channel-specific (prompts, palette, disclaimers, wordmark, topic seeds,
+# module defaults). Engine code reads these via config.PROFILE.
+CHANNEL = _get("CHANNEL", "rendite")
+CHANNEL_DIR = BASE_DIR / "channels" / CHANNEL
+import importlib  # noqa: E402
+
+PROFILE = importlib.import_module(f"channels.{CHANNEL}.profile")
+
+# Finance-only modules (stocks story pipeline, dividend posts): profile default,
+# overridable per instance via .env.
+ENABLE_STOCKS = _get("ENABLE_STOCKS", str(PROFILE.ENABLE_STOCKS)).lower() == "true"
+ENABLE_DIVIDEND = _get("ENABLE_DIVIDEND", str(PROFILE.ENABLE_DIVIDEND)).lower() == "true"
+
+
 # ── Claude ────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")
 CLAUDE_MODEL = _get("CLAUDE_MODEL", "claude-sonnet-4-6")
@@ -111,7 +127,7 @@ COMMUNITY_DIGEST_PROFILES = _get_list("COMMUNITY_DIGEST_PROFILES", "")
 BRAND_NAME = _get("BRAND_NAME", "Renditeradar")
 BRAND_HANDLE = _get("BRAND_HANDLE", "@rendite.radar.official")
 # Round profile avatar baked into photo covers (top-left, like the IG profile picture)
-BRAND_AVATAR = _get("BRAND_AVATAR", str(BASE_DIR / "assets" / "templates" / "Rendite Radar Profilbild-selection.png"))
+BRAND_AVATAR = _get("BRAND_AVATAR", str(CHANNEL_DIR / "assets" / "templates" / "Rendite Radar Profilbild-selection.png"))
 
 # ── Stocks / daily story pipeline ─────────────────────────────────────────
 # yfinance | fake  (fake = offline testing without network)
@@ -156,12 +172,15 @@ STOCK_ATR_STOP_MULT = float(_get("STOCK_ATR_STOP_MULT", "2.0"))
 STOCK_ATR_TP_MULT = float(_get("STOCK_ATR_TP_MULT", "4.0"))
 # When to build the daily earnings + watchlist stories (local TIMEZONE).
 STOCK_STORY_SLOT = _get("STOCK_STORY_SLOT", "09:00")
+# Generic morning build tick (feed posts, milestone check) — decoupled from the
+# stocks slot so channels with ENABLE_STOCKS=false still get their daily build.
+DAILY_BUILD_SLOT = _get("DAILY_BUILD_SLOT", STOCK_STORY_SLOT)
 
 # ── Feed posts (educational carousels, 2×/week) ────────────────────────────
 # Posting slots as "<WEEKDAY> HH:MM" (MON..SUN, local TIMEZONE).
 FEED_POST_SLOTS = _get_list("FEED_POST_SLOTS", "TUE 17:00,THU 17:00")
-FEED_TEMPLATE_TITLE = BASE_DIR / "assets" / "templates" / "feed_bg_title.png"
-FEED_TEMPLATE_CONTENT = BASE_DIR / "assets" / "templates" / "feed_bg_content.png"
+FEED_TEMPLATE_TITLE = CHANNEL_DIR / "assets" / "templates" / "feed_bg_title.png"
+FEED_TEMPLATE_CONTENT = CHANNEL_DIR / "assets" / "templates" / "feed_bg_content.png"
 
 # ── Weekly editorial workflow ──────────────────────────────────────────────
 # Once a week we plan + create the coming week's posts together (Redaktionssitzung);
@@ -181,7 +200,7 @@ STORY_SLOTS_US = _get_list("STORY_SLOTS_US", "16:00,18:30,20:30")
 
 # ── Follower milestones ────────────────────────────────────────────────────
 # When the account crosses one of these follower marks, a milestone thank-you
-# story (design: assets/templates/story-meilenstein.png) goes to Telegram review
+# story (design: channels/<CHANNEL>/assets/templates/story-meilenstein.png) goes to Telegram review
 # and is posted immediately after approval (src/milestones.py). Checked daily.
 FOLLOWER_MILESTONES = sorted(int(x) for x in _get_list(
     "FOLLOWER_MILESTONES", "100,200,500,1000,2500,5000,10000,25000,50000,100000"))

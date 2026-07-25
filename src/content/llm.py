@@ -119,7 +119,7 @@ def builtin_fake() -> "FakeLLM":
              "body": "50% Charttechnik + 50% Fundamental ergeben eine Ampel: grün, gelb oder rot. "
                      "Wir wählen Titel aus VERSCHIEDENEN Branchen für Streuung."},
             {"heading": "Zusammenfassung",
-             "body": "Jeden Tag frische, datenbasierte Einordnungen — folge @rendite.radar.official "
+             "body": f"Jeden Tag frische, datenbasierte Einordnungen — folge {config.BRAND_HANDLE} "
                      "für mehr. Keine Anlageberatung."},
         ],
         "caption": "So läuft unsere Aktien-Auswahl ab — transparent und datenbasiert.\n\n"
