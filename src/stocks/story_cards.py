@@ -117,7 +117,27 @@ def render_new_post_story(title: str, out_path: str, badge: str = "NEUER BEITRAG
     draw.rounded_rectangle((80, 470, W - 80, 668), radius=54, fill=_BRAND)
     _center(draw, badge, _font(84, bold=True), 512, (255, 255, 255))
     _center(draw, sub, _font(40), 760, _MUTED)
-    _center_wrap(draw, title, _font(58, bold=True), 860, 22, _FG, 76)
+
+    # Title: shrink-to-fit + line cap inside the band between the sub-line and the CTA,
+    # so an over-long title (e.g. a whole reel hook) can never overflow the card again.
+    tx0, ty0, ty1 = 90, 820, 1220
+    max_w = W - 2 * tx0
+    font = _font(34, bold=True)
+    lines = _wrap_lines_px(draw, title, font, max_w)
+    lh = int(34 * 1.28)
+    for size in range(62, 33, -2):
+        f = _font(size, bold=True)
+        ls = _wrap_lines_px(draw, title, f, max_w)
+        h = int(size * 1.28)
+        if len(ls) * h <= (ty1 - ty0):
+            font, lines, lh = f, ls, h
+            break
+    lines = lines[: max(1, (ty1 - ty0) // lh)]
+    yy = ty0 + ((ty1 - ty0) - len(lines) * lh) // 2   # vertically centered in the band
+    for ln in lines:
+        w = draw.textlength(ln, font=font)
+        draw.text(((W - w) / 2, yy), ln, font=font, fill=_FG)
+        yy += lh
 
     _center(draw, cta, _font(46, bold=True), 1280, _BRAND)
     _center(draw, "tippe oben auf mein Profil", _font(34), 1352, _MUTED)

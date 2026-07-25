@@ -212,7 +212,9 @@ async def announce_new_reel(reel_id: int) -> str | None:
             return None
         raw = reel.script_json or "{}"
     data = json.loads(raw) if raw else {}
-    title = data.get("title") or (data.get("texts") or {}).get("hook") or "Neues Reel"
+    # Use the reel's short title — NEVER the full hook (a long hook overflowed the
+    # announcement card). render_new_post_story also shrink-fits as a safety net.
+    title = data.get("title") or "Neues Reel"
     day = datetime.now(ZoneInfo(config.TIMEZONE))
     stamp = day.strftime("%Y%m%d_%H%M%S")
     path = render_new_post_story(

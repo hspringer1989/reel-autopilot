@@ -301,7 +301,8 @@ def build_stock_reel(ticker: str, topic: str = "", md: MarketData | None = None,
 
     with session_scope() as session:
         reel = ReelRow(trend_id=0,
-                       script_json=json.dumps({"ticker": ticker, "texts": texts}, ensure_ascii=False),
+                       script_json=json.dumps({"ticker": ticker, "texts": texts,
+                                               "title": script.title}, ensure_ascii=False),
                        caption=f"{caption}\n\n{' '.join(hashtags)}".strip(), status="draft")
         session.add(reel)
         session.flush()
