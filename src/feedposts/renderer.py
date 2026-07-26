@@ -13,7 +13,9 @@ from src import branding
 from src.models import FeedPost, Slide
 
 W, H = 1080, 1350
-_CTA_DISCLAIMER = "Keine Anlageberatung · nur Bildung & Unterhaltung · Werbung"
+# Der Disclaimer auf der CTA-Slide ist kanalabhängig und kommt aus dem Profil —
+# für rendite ist FEED_DISCLAIMER wortgleich mit dem zuvor fest verdrahteten Text.
+_CTA_DISCLAIMER = config.PROFILE.FEED_DISCLAIMER
 
 
 def _open_bg(path) -> "object":
