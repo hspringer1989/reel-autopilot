@@ -14,7 +14,7 @@ _STR_KEYS = (
     "REEL_DISCLAIMER", "FEED_DISCLAIMER", "CARD_FOOTER_DISCLAIMER", "MILESTONE_FOOTER",
     "DISCLAIMER_CHECK", "WORDMARK", "MILESTONE_TAGLINE",
     "REEL_SYSTEM_PROMPT", "REEL_HASHTAG_HINT", "FEED_SYSTEM_PROMPT", "FEED_HASHTAG_HINT",
-    "EDITORIAL_SYSTEM_PROMPT", "ADVICE_PATTERN",
+    "EDITORIAL_SYSTEM_PROMPT", "ADVICE_PATTERN", "SCORER_SYSTEM_PROMPT",
     "COMMENT_SYSTEM", "DM_SYSTEM", "DIGEST_SYSTEM_PROMPT",
 )
 _PALETTE_KEYS = ("BLUE", "BLUE_LIGHT", "BLUE_DEEP", "BG", "CARD", "FG", "MUTED")
@@ -78,6 +78,26 @@ def test_profile_contract(channel):
     assert slugs and len(slugs) == len(set(slugs))
     assert all(len(t) == 3 and all(isinstance(x, str) and x for x in t)
                for t in prof.FEED_TOPIC_SEED)
+
+    # Themenbeschaffung: ohne Quellen sammelt der Kanal nichts — und ohne diesen Test
+    # fiele das erst im Betrieb auf (früher griffen stillschweigend Finanz-Defaults).
+    sources = prof.SOURCES
+    assert set(sources) >= {"rss", "reddit", "google_trends"}, \
+        f"{channel}: SOURCES braucht die Schlüssel rss, reddit, google_trends"
+    assert all(isinstance(u, str) and u.strip() for u in sources["rss"]), \
+        f"{channel}: leerer Eintrag in SOURCES['rss']"
+    assert all(isinstance(s, str) and s.strip() for s in sources["reddit"]), \
+        f"{channel}: leerer Eintrag in SOURCES['reddit']"
+    assert isinstance(sources["google_trends"], bool)
+    assert sources["rss"] or sources["reddit"] or sources["google_trends"], \
+        f"{channel}: keine einzige Themenquelle konfiguriert"
+
+    # Gewichte der Bewertung: drei Anteile, Summe 1.0 (wie STOCK_W_TECH/STOCK_W_FUND)
+    weights = prof.SCORER_WEIGHTS
+    assert len(weights) == 3 and all(isinstance(w, (int, float)) and 0 <= w <= 1 for w in weights), \
+        f"{channel}: SCORER_WEIGHTS braucht drei Anteile zwischen 0 und 1"
+    assert abs(sum(weights) - 1.0) < 1e-9, \
+        f"{channel}: SCORER_WEIGHTS summiert sich auf {sum(weights)}, erwartet 1.0"
 
     # module flags
     assert isinstance(prof.ENABLE_STOCKS, bool)

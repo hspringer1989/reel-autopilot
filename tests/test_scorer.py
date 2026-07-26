@@ -2,7 +2,7 @@ import json
 
 from src.content.llm import FakeLLM
 from src.content.scorer import score_trends
-from src.models import TrendItem
+from src.models import TrendItem, TrendScore
 
 
 def _trends(n):
@@ -15,9 +15,17 @@ def test_scores_parsed_and_weighted():
         {"i": 1, "viral": 0.4, "fit": 0.8, "monetization": 0.2},
     ])})
     scores = score_trends(_trends(2), llm)
-    assert scores[0].total == 1.0
-    assert scores[1].total == round(0.45 * 0.4 + 0.30 * 0.8 + 0.25 * 0.2, 4)
+    # ohne Argument gilt die historische Gewichtung — unabhängig vom aktiven Kanal
+    assert scores[0].total() == 1.0
+    assert scores[1].total() == round(0.45 * 0.4 + 0.30 * 0.8 + 0.25 * 0.2, 4)
     assert scores[0].reasoning == "top"
+
+
+def test_weights_come_from_the_channel():
+    """Dieselbe Bewertung, andere Kanal-Gewichte → anderes Gesamtergebnis."""
+    score = TrendScore(viral_potential=0.8, niche_fit=0.9, monetization=0.1)
+    assert score.total((0.45, 0.30, 0.25)) == round(0.45 * 0.8 + 0.30 * 0.9 + 0.25 * 0.1, 4)
+    assert score.total((0.50, 0.40, 0.10)) == round(0.50 * 0.8 + 0.40 * 0.9 + 0.10 * 0.1, 4)
 
 
 def test_out_of_range_values_clamped():

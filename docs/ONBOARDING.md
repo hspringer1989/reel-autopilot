@@ -38,6 +38,14 @@ Dann `channels/tech/profile.py` ausfüllen — alle `TODO(<channel>)`-Stellen:
 Prompts (Nische, Zielgruppe, Tonalität), Farbpalette, Disclaimer, Wortmarke,
 Themen-Seed. Als Referenz für ein vollständiges Profil: `channels/rendite/profile.py`.
 
+Besonders wichtig ist `SOURCES` — aus welchen Feeds/Subreddits dein Kanal Themen zieht —
+zusammen mit `SCORER_SYSTEM_PROMPT` und `SCORER_WEIGHTS`. Beschaffung und Bewertung
+gehören zusammen: je breiter deine Quellen, desto schwerer muss das Kriterium "fit"
+wiegen, weil dann mehr Randthemen aussortiert werden müssen. Google-News-Suchen
+(`news.google.com/rss/search?q=…&hl=de&gl=DE&ceid=DE:de`) sind gewöhnliches RSS und
+eine ergiebige Quelle; die Themen-Rubriken dagegen sind kaum gefiltert.
+`pytest tests/` besteht nicht, solange diese Felder leer sind.
+
 Eigene Bild-Templates nach `channels/tech/assets/templates/`:
 - `feed_bg_title.png` + `feed_bg_content.png` (1080×1350) für Carousel-Slides
 - ein Profilbild (Pfad per `BRAND_AVATAR` in der `.env` setzen)
@@ -59,9 +67,12 @@ TTS_PROVIDER=fake
 STOCK_DATA_PROVIDER=fake
 BRAND_NAME=DeinKanalname
 BRAND_HANDLE=@dein.handle
-REDDIT_SUBREDDITS=de_EDV,technik,…      # deine Nischen-Subreddits
-RSS_FEEDS=https://…                     # deine Nischen-Feeds (Komma-getrennt)
 ```
+
+Die Themenquellen stehen im Profil (`SOURCES`), nicht hier — sonst würden sie beim
+Kanalwechsel nicht mitwandern. `RSS_FEEDS`, `REDDIT_SUBREDDITS`, `GOOGLE_TRENDS_ENABLED`
+und `SCORER_WEIGHTS` gibt es in der `.env` weiterhin, aber nur als Instanz-Übersteuerung
+zum Nachjustieren.
 
 ## 4. Offline verifizieren
 

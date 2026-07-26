@@ -56,14 +56,26 @@ TTS_DAILY_BUDGET_CHARS = int(_get("TTS_DAILY_BUDGET_CHARS", "15000"))
 REDDIT_CLIENT_ID = _get("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = _get("REDDIT_CLIENT_SECRET")
 REDDIT_USER_AGENT = _get("REDDIT_USER_AGENT", "reel-autopilot/0.1")
-REDDIT_SUBREDDITS = _get_list("REDDIT_SUBREDDITS", "Finanzen,mauerstrassenwetten,Aktien")
-RSS_FEEDS = _get_list(
-    "RSS_FEEDS",
-    "https://www.tagesschau.de/wirtschaft/index~rss2.xml,"
-    "https://www.n-tv.de/wirtschaft/rss,"
-    "https://www.finanzen.net/rss/news",
-)
+# Welche Quellen ein Kanal anzapft, ist Kanal-Identität und steht im Profil
+# (PROFILE.SOURCES); die .env bleibt die Instanz-Schraube und übersteuert.
+# Vorher standen hier feste Finanz-Defaults — ein Nicht-Finanz-Kanal, der die
+# .env-Zeilen vergaß, sammelte dadurch stillschweigend Wirtschaftsnachrichten.
+_SOURCES = PROFILE.SOURCES
+REDDIT_SUBREDDITS = _get_list("REDDIT_SUBREDDITS", ",".join(_SOURCES.get("reddit", [])))
+RSS_FEEDS = _get_list("RSS_FEEDS", ",".join(_SOURCES.get("rss", [])))
+# Themenlose Tages-Charts: pro Kanal an-/abschaltbar.
+GOOGLE_TRENDS_ENABLED = _get(
+    "GOOGLE_TRENDS_ENABLED", str(bool(_SOURCES.get("google_trends", False)))
+).lower() == "true"
 GOOGLE_TRENDS_GEO = _get("GOOGLE_TRENDS_GEO", "DE")
+
+# Gewichtung der Bewertungs-Kriterien (viral, fit, monetization) aus dem Profil,
+# per .env als "0.5,0.4,0.1" übersteuerbar.
+SCORER_WEIGHTS = tuple(
+    float(x) for x in _get_list(
+        "SCORER_WEIGHTS", ",".join(str(w) for w in PROFILE.SCORER_WEIGHTS)
+    )
+)
 
 # ── B-roll footage ────────────────────────────────────────────────────────
 PEXELS_API_KEY = _get("PEXELS_API_KEY")

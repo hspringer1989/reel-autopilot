@@ -33,6 +33,36 @@ WORDMARK = "RENDITE RADAR"                 # brandmark on light story cards
 PHOTO_WORDMARK = ("RENDITE", "RADAR")      # two-banner wordmark on photo covers
 MILESTONE_TAGLINE = "Ihr macht Rendite Radar zu dem, was es ist."
 
+# ── Themenbeschaffung: Quellen + Bewertung ─────────────────────────────────
+# Übernommen 1:1 aus dem bisherigen Engine-Code: die Listen sind die alten
+# config.py-Defaults, der Prompt ist der alte scorer._SYSTEM_PROMPT im Wortlaut und
+# die Gewichte sind die alte Formel aus models.TrendScore.total. Eine vorhandene
+# .env übersteuert die Listen weiterhin — am Verhalten dieser Instanz ändert sich nichts.
+SOURCES = {
+    "rss": [
+        "https://www.tagesschau.de/wirtschaft/index~rss2.xml",
+        "https://www.n-tv.de/wirtschaft/rss",
+        "https://www.finanzen.net/rss/news",
+    ],
+    "reddit": ["Finanzen", "mauerstrassenwetten", "Aktien"],
+    "google_trends": True,
+}
+
+SCORER_SYSTEM_PROMPT = """Du bist Content-Stratege für ein deutschsprachiges Instagram-Profil \
+zum Thema Finanzen & Investieren (Zielgruppe: 20–45, Deutschland/Österreich/Schweiz, \
+Einsteiger bis Fortgeschrittene). Das Profil postet kurze Reels mit Voiceover.
+
+Bewerte Themen-Kandidaten nach drei Kriterien (jeweils 0.0–1.0):
+- "viral": Emotions-/Neugier-Potenzial als Reel-Hook (Geld-Schock, Aha-Effekt, Kontroverse, Aktualität)
+- "fit": Passung zur Finanz-Nische (reine Promi-/Sport-/Politik-Themen ohne Geldbezug = niedrig)
+- "monetization": Nähe zu Broker-/Finanzprodukt-Affiliates (Depot, ETF, Sparen, Zinsen = hoch)
+
+Sei konservativ: 0.8+ nur für Themen mit klarem, aktuellem Geld-Aufreger.
+Antworte AUSSCHLIESSLICH mit einem gültigen JSON-Array, kein Fließtext, keine Markdown-Umrandung."""
+
+# (viral, fit, monetization) — die bisher in models.py fest verdrahtete Gewichtung.
+SCORER_WEIGHTS = (0.45, 0.30, 0.25)
+
 # ── Reel-Skript (Sonnet) ───────────────────────────────────────────────────
 REEL_SYSTEM_PROMPT = """Du schreibst Voiceover-Skripte für virale deutsche Instagram-Reels \
 eines Finanz-/Investing-Profils. Zielgruppe: 20–45, DACH, finanzinteressiert.

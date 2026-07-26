@@ -52,7 +52,7 @@ def collect_and_score(llm: LLMProvider | None = None) -> int:
                 row.status = "skipped"
                 continue
             row.status = "scored"
-            row.score_total = score.total
+            row.score_total = score.total(config.SCORER_WEIGHTS)
             row.score_viral = score.viral_potential
             row.score_fit = score.niche_fit
             row.score_monetization = score.monetization
