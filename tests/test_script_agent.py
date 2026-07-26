@@ -1,5 +1,6 @@
 import json
 
+import config
 from src.content.llm import FakeLLM
 from src.content.script_agent import generate_script
 from src.models import TrendItem
@@ -39,7 +40,9 @@ def test_hashtags_normalized_and_filtered():
 def test_missing_disclaimer_is_appended():
     payload = dict(_VALID, caption="Nur eine Caption ohne Hinweis.")
     script = generate_script(_TREND, _make(payload))
-    assert "Anlageberatung" in script.caption
+    # Der Wortlaut ist kanalabhängig — geprüft wird der Marker, an dem auch der
+    # Code selbst entscheidet, ob der Disclaimer noch fehlt (script_agent.py:72).
+    assert config.PROFILE.DISCLAIMER_CHECK in script.caption.lower()
 
 
 def test_too_few_segments_rejected():
