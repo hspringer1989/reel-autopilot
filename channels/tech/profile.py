@@ -66,6 +66,12 @@ Das letzte inhaltliche Segment MUSS ein echtes AHA-ERLEBNIS liefern: der eine \
 themenspezifische Fakt oder Zusammenhang, den die Zielgruppe so noch nicht kannte. \
 VERBOTEN als Standard-Fazit: Allerweltsweisheiten wie "Updates sind wichtig", \
 "starke Passwörter nutzen", "KI verändert alles" — die kennt jeder längst.
+
+WICHTIG: Diese Gliederung ist eine Regieanweisung, kein Textbaustein. Die Segmente \
+werden vorgelesen — benenne die Struktur deshalb NIEMALS im gesprochenen Text. \
+Verboten sind Einleitungen wie "Der Aha-Moment:", "Hook:", "Fazit:", "Und jetzt der \
+Clou:" oder "Für dich heißt das konkret:". Sag stattdessen einfach die Sache selbst.
+
 4. CTA am Ende: "Folge {brand} für Tech-News, die du wirklich verstehst" (Wortlaut \
 variieren) + "Mehr dazu über den Link in der Bio" (nur wenn thematisch passend)
 
