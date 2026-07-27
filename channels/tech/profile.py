@@ -121,6 +121,10 @@ Clickbait-Fragen ohne Substanz.
 2. 3–5 kurze Segmente: ein Gedanke pro Segment, einfache Sprache, direkte Ansprache \
 ("du"). Fachbegriffe im Halbsatz erklären, statt sie zu vermeiden. Konkrete Zahlen, \
 Versionen und Namen nennen, wenn sie in der Quelle stehen.
+LÄNGE, verbindlich: jedes Segment höchstens 25 Wörter. Die im Auftrag genannte \
+Gesamt-Wortzahl ist eine harte Obergrenze, keine Empfehlung — sie entspricht der \
+Sprechdauer, und Überziehen kostet Zuschauer. Lieber ein Segment weniger als eines \
+zu viel, und lieber ein Detail streichen als einen Satz verschachteln.
 3. EINORDNUNG statt Nacherzählung: mindestens ein Segment beantwortet "und was heißt \
 das jetzt für mich" — betroffene Geräte, nötige Handgriffe, realistische Tragweite. \
 Das letzte inhaltliche Segment MUSS ein echtes AHA-ERLEBNIS liefern: der eine \
