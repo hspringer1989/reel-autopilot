@@ -12,6 +12,8 @@ from sqlalchemy import select
 
 import config
 from src.collectors.rss import active_collectors
+from src.content.article import fetch_article_text
+from src.content.factcheck import check_script
 from src.content.llm import LLMProvider, get_llm
 from src.content.scorer import score_trends
 from src.content.script_agent import generate_script
@@ -86,9 +88,14 @@ def produce_reel(trend: TrendRow, llm: LLMProvider | None = None) -> int | None:
     """Script → TTS → render for one trend. Returns the reel id (pending_review)
     or None if a stage failed (trend is then released for another attempt)."""
     llm = llm or get_llm()
+    # Den Quellartikel holen, BEVOR geschrieben wird: manche Feeds liefern als
+    # <description> nur die Überschrift, und aus einer Überschrift fünf Segmente zu
+    # schreiben ist genau die Situation, in der ein Modell Details erfindet.
+    article = fetch_article_text(trend.url) if trend.url else None
     script = generate_script(
         TrendItem(source=trend.source, title=trend.title, summary=trend.summary, url=trend.url),
         llm,
+        article=article,
     )
     if script is None:
         logger.warning(f"Kein Skript für Trend #{trend.id} — übersprungen")
@@ -105,10 +112,15 @@ def produce_reel(trend: TrendRow, llm: LLMProvider | None = None) -> int | None:
     if script.segments:
         script.hook = script.segments[0].text
 
+    # Gegen die Quelle abgleichen. Beratend: das Ergebnis geht an den Menschen in die
+    # Telegram-Freigabe, es verwirft nichts von selbst.
+    findings = check_script(script, article, llm)
+
     with session_scope() as session:
         reel = ReelRow(
             trend_id=trend.id, script_json=_script_to_json(script),
             caption=f"{script.caption}\n\n{' '.join(script.hashtags)}".strip(),
+            fact_check="\n".join(findings),
             status="draft",
         )
         session.add(reel)

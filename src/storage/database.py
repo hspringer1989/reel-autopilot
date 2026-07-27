@@ -53,6 +53,9 @@ class ReelRow(Base):
     caption: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
     error: Mapped[str] = mapped_column(Text, default="")
+    # Befunde des Quellen-Abgleichs (src/content/factcheck.py), eine Zeile je ungedecktem
+    # Segment. Rein beratend: sie erscheinen in der Telegram-Freigabe, blockieren nichts.
+    fact_check: Mapped[str] = mapped_column(Text, default="")
     ig_media_id: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
     published_at: Mapped[str] = mapped_column(String(40), default="")
@@ -257,6 +260,9 @@ def _migrate(engine) -> None:
         feed_cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(feed_posts)").fetchall()}
         if feed_cols and "scheduled_at" not in feed_cols:
             conn.exec_driver_sql("ALTER TABLE feed_posts ADD COLUMN scheduled_at VARCHAR(20) DEFAULT ''")
+        reel_cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(reels)").fetchall()}
+        if reel_cols and "fact_check" not in reel_cols:
+            conn.exec_driver_sql("ALTER TABLE reels ADD COLUMN fact_check TEXT DEFAULT ''")
 
 
 def _seed_feed_topics(session_factory) -> None:

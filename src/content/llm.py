@@ -147,12 +147,15 @@ def builtin_fake() -> "FakeLLM":
         {"i": i, "comment": "Spannender Beitrag 🙌 Wie siehst du das mittelfristig?"}
         for i in range(10)
     ])
+    # Offline gilt jedes Segment als gedeckt — sonst wuerde jeder Trockenlauf
+    # Warnungen zeigen, die nichts mit dem Skript zu tun haben.
+    fact_check = json.dumps([])
     return FakeLLM({
         "score_trends": scores, "generate_script": script,
         "stock_analysis": stock_analysis, "feed_post": feed_post,
         "trend_ticker": trend_ticker, "week_plan": week_plan,
         "community_comments": community_comments, "community_dm": community_dm,
-        "community_digest": community_digest,
+        "community_digest": community_digest, "fact_check": fact_check,
     })
 
 
