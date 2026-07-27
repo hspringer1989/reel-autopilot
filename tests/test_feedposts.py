@@ -95,7 +95,11 @@ async def test_publish_next_feed_post_marks_published(monkeypatch):
         assert row.ig_media_id == "IG_FEED_1"
 
 
-async def test_publish_feed_requires_config():
+async def test_publish_feed_requires_config(monkeypatch):
+    # Die fehlende Konfiguration muss erzwungen werden. Auf einer Instanz, die Instagram
+    # fertig eingerichtet hat, liefe die Funktion sonst am Schutz vorbei und scheiterte
+    # erst am nicht existierenden a.jpg — der Test prüfte dann nicht mehr, was er behauptet.
+    monkeypatch.setattr(instagram.config, "PUBLIC_MEDIA_DIR", "")
     with pytest.raises(instagram.PublishError):
         await instagram.publish_feed_post(["a.jpg"], "caption")
 

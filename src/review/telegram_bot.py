@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 
 import config
-from src.storage.database import FeedPostRow, ReelRow, StoryRow, session_scope
+from src.storage.database import FeedPostRow, ReelRow, StoryRow, TrendRow, session_scope
 
 _DECISIONS = {
     "approve": ("approved", "✅ Freigegeben — wird zum nächsten Slot gepostet"),
@@ -53,11 +53,52 @@ def _story_keyboard(story_id: int) -> InlineKeyboardMarkup:
     ]])
 
 
+def _provenance(reel_id: int) -> str:
+    """Source link + fact-check block for a reel, assembled from the DB.
+
+    Without the link a reviewer cannot check a claim without hunting for the article;
+    the fact-check lines point at the segments the source does not cover. Returns ""
+    when there is nothing to show."""
+    with session_scope() as session:
+        reel = session.get(ReelRow, reel_id)
+        if reel is None:
+            return ""
+        trend = session.get(TrendRow, reel.trend_id) if reel.trend_id else None
+        findings = reel.fact_check
+        source = None
+        if trend is not None:
+            source = (trend.title, trend.url, trend.score_total,
+                      trend.score_viral, trend.score_fit, trend.score_reasoning)
+
+    lines: list[str] = []
+    if source:
+        title, url, total, viral, fit, reasoning = source
+        lines.append("📄 Quelle")
+        lines.append(title)
+        if url:
+            lines.append(url)
+        if total:
+            lines.append(f"Score {total:.2f}  (viral {viral:.2f} · fit {fit:.2f})")
+        if reasoning:
+            lines.append(f"„{reasoning[:200]}“")
+    if findings:
+        count = len(findings.splitlines())
+        lines += ["", f"⚠️ Quellen-Abgleich: {count} Aussage(n) nicht durch die Quelle gedeckt"]
+        lines += findings.splitlines()
+        lines += ["", "Das ist ein Hinweis, kein Urteil — bitte im Artikel nachlesen."]
+    return "\n".join(lines)
+
+
 async def send_for_review(reel_id: int, video_path: str, caption: str) -> None:
     """One-shot send (usable from the CLI without the polling loop running;
-    the button callback is processed once `python main.py run` polls)."""
+    the button callback is processed once `python main.py run` polls).
+
+    The video carries caption + buttons; source and fact-check follow as a SEPARATE
+    message: the video caption is capped at 1024 characters, and appending to it would
+    truncate the very text the reviewer is meant to approve."""
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = f"🎬 Reel #{reel_id} wartet auf Freigabe\n\n{caption}"
+    provenance = _provenance(reel_id)
     async with bot:
         with open(video_path, "rb") as video:
             await bot.send_video(
@@ -70,6 +111,12 @@ async def send_for_review(reel_id: int, video_path: str, caption: str) -> None:
                 supports_streaming=True,
                 read_timeout=120,
                 write_timeout=300,
+            )
+        if provenance:
+            await bot.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                text=provenance[:4096],
+                disable_web_page_preview=True,
             )
     logger.info(f"Reel #{reel_id} zur Freigabe an Telegram gesendet")
 

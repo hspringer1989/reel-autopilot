@@ -103,7 +103,10 @@ async def test_group_stale_day_not_posted(monkeypatch):
     assert await publish_next_candidate_group(market="US") == []
 
 
-async def test_publish_story_requires_config():
+async def test_publish_story_requires_config(monkeypatch):
     import pytest
+    # Ohne dieses Leeren haengt der Test an der .env des Betreibers: auf einer fertig
+    # eingerichteten Instanz kommt statt PublishError ein FileNotFoundError.
+    monkeypatch.setattr(instagram.config, "PUBLIC_MEDIA_DIR", "")
     with pytest.raises(instagram.PublishError):
         await instagram.publish_story("card.jpg")
