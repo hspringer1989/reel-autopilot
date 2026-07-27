@@ -62,9 +62,14 @@ SOURCES = {
         "https://netzpolitik.org/feed/",                    # Datenschutz, Netzpolitik
         "https://stadt-bremerhaven.de/feed/",               # Consumer, Apps
         "https://the-decoder.de/feed/",                     # KI
-        # Google-News-Suchen: aggregieren viele Quellen, sind einfaches RSS.
-        "https://news.google.com/rss/search?q=k%C3%BCnstliche+intelligenz&hl=de&gl=DE&ceid=DE:de",
-        "https://news.google.com/rss/search?q=IT-Sicherheit+OR+Sicherheitsl%C3%BCcke&hl=de&gl=DE&ceid=DE:de",
+        # ENTFERNT: die beiden Google-News-Suchen. Sie lieferten zwar reichlich Themen,
+        # ihre <description> wiederholt aber nur die Ueberschrift — gemessen bei 30 von
+        # 30 Eintraegen, waehrend alle anderen Quellen 139-470 Zeichen echten Kontext
+        # liefern. Der Skript-Agent bekommt also nichts ausser einer Schlagzeile und
+        # erfindet den Rest; ein Reel schrieb frei erfundene Details sogar einer
+        # namentlich genannten Sicherheitsfirma zu. Dazu sind die Google-News-URLs
+        # Weiterleitungs-Blobs, die sich nicht gegenpruefen lassen.
+        # Wieder aufnehmen, sobald die Engine den Artikeltext selbst abruft.
     ],
     "reddit": ["de_EDV", "informatik", "Datenschutz", "KuenstlicheIntelligenz",
                "cybersecurity", "LocalLLaMA"],
@@ -141,8 +146,18 @@ Clou:" oder "Für dich heißt das konkret:". Sag stattdessen einfach die Sache s
 variieren) + "Mehr dazu über den Link in der Bio" (nur wenn thematisch passend)
 
 SORGFALT (zwingend, keine Ausnahmen):
-- Bleib bei dem, was in der Quelle steht. Erfinde keine Zahlen, Versionsnummern, \
-CVE-Kennungen, Preise oder Zitate. Wenn etwas unklar ist, formuliere es vage statt falsch.
+- Der übergebene Kontext ist deine EINZIGE Faktenquelle. Was dort nicht steht, \
+existiert für dich nicht — auch wenn du es aus anderem Wissen zu kennen glaubst.
+- Besteht der Kontext nur aus einer Überschrift, bleib auf genau dieser Flughöhe: \
+benenne, WAS gemeldet wurde, und ergänze KEINE Mechanismen, Hersteller, Angriffswege, \
+Stückzahlen oder Betroffenen-Gruppen. Ein kurzes, ehrliches Reel ist besser als ein \
+ausführliches, das sich Details ausdenkt.
+- VERBOTEN sind Zuschreibungen, die der Kontext nicht wörtlich hergibt: kein "laut \
+Malwarebytes", kein "Forscher berichten", kein "der Hersteller bestätigte", solange \
+das nicht ausdrücklich in der Quelle steht. Eine erfundene Quellenangabe ist schlimmer \
+als gar keine, weil sie fremde Glaubwürdigkeit borgt.
+- Erfinde keine Zahlen, Versionsnummern, CVE-Kennungen, Preise oder Zitate. Wenn etwas \
+unklar ist, formuliere es vage statt falsch.
 - Trenne Fakt und Spekulation deutlich: "bestätigt ist", "noch offen ist", \
 "Beobachter erwarten".
 - KEINE Schritt-für-Schritt-Anleitungen zum Angreifen, Umgehen von Schutzmechanismen, \
