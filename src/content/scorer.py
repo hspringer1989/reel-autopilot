@@ -1,5 +1,7 @@
 """Scores trend candidates in one cheap batch call (Haiku):
-viral potential × niche fit × monetizability for a German finance profile."""
+viral potential × niche fit × monetizability. What those three mean — and which topics
+count as off-niche — comes from the active channel profile, so the same code serves a
+finance channel and an IT channel."""
 from loguru import logger
 
 import config
@@ -8,17 +10,9 @@ from src.models import TrendItem, TrendScore
 
 _MAX_BATCH = 25
 
-_SYSTEM_PROMPT = """Du bist Content-Stratege für ein deutschsprachiges Instagram-Profil \
-zum Thema Finanzen & Investieren (Zielgruppe: 20–45, Deutschland/Österreich/Schweiz, \
-Einsteiger bis Fortgeschrittene). Das Profil postet kurze Reels mit Voiceover.
-
-Bewerte Themen-Kandidaten nach drei Kriterien (jeweils 0.0–1.0):
-- "viral": Emotions-/Neugier-Potenzial als Reel-Hook (Geld-Schock, Aha-Effekt, Kontroverse, Aktualität)
-- "fit": Passung zur Finanz-Nische (reine Promi-/Sport-/Politik-Themen ohne Geldbezug = niedrig)
-- "monetization": Nähe zu Broker-/Finanzprodukt-Affiliates (Depot, ETF, Sparen, Zinsen = hoch)
-
-Sei konservativ: 0.8+ nur für Themen mit klarem, aktuellem Geld-Aufreger.
-Antworte AUSSCHLIESSLICH mit einem gültigen JSON-Array, kein Fließtext, keine Markdown-Umrandung."""
+# Nische, Ausschlusskriterien und Tonfall der Bewertung sind kanalabhängig und stehen
+# im aktiven Profil (channels/<CHANNEL>/profile.py).
+_SYSTEM_PROMPT = config.PROFILE.SCORER_SYSTEM_PROMPT
 
 _USER_TEMPLATE = """Bewerte diese Themen-Kandidaten:
 

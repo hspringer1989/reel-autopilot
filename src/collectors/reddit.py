@@ -1,4 +1,7 @@
-"""Hot posts from German finance subreddits via PRAW (read-only)."""
+"""Hot posts from the channel's subreddits via PRAW (read-only).
+Which subreddits those are comes from the active profile (PROFILE.SOURCES["reddit"])."""
+from loguru import logger
+
 import config
 from src.collectors.base import Collector
 from src.models import TrendItem
@@ -22,7 +25,15 @@ class RedditCollector(Collector):
 
         items: list[TrendItem] = []
         for sub_name in config.REDDIT_SUBREDDITS:
-            for post in reddit.subreddit(sub_name).hot(limit=_POSTS_PER_SUB):
+            # Per-Subreddit abfangen: ein einziger getippter, privater oder gesperrter
+            # Name würde sonst die ganze Runde reißen — samt der bereits gesammelten
+            # Posts der anderen Subreddits.
+            try:
+                posts = list(reddit.subreddit(sub_name).hot(limit=_POSTS_PER_SUB))
+            except Exception as exc:  # noqa: BLE001 — praw wirft je nach Ursache anderes
+                logger.warning(f"Subreddit r/{sub_name} übersprungen: {exc}")
+                continue
+            for post in posts:
                 if post.stickied or post.score < _MIN_UPVOTES:
                     continue
                 items.append(

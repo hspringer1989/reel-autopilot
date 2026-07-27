@@ -31,10 +31,15 @@ via a link-in-bio page with broker affiliate offers (Phase 4).
 
 One process = one channel. `CHANNEL` in `.env` selects `channels/<name>/profile.py`
 (loaded once as `config.PROFILE`), which holds EVERYTHING channel-specific: system
-prompts (reel/feed/editorial/community/digest), disclaimers + the caption safety-net
-substring (`DISCLAIMER_CHECK`), the advice-pattern regex, fallback templates,
+prompts (reel/feed/editorial/community/digest/scorer), disclaimers + the caption
+safety-net substring (`DISCLAIMER_CHECK`), the advice-pattern regex, fallback templates,
 brand palette (re-exported by `src/branding.py`), wordmarks, milestone texts,
-hashtag hints, the feed topic seed and module defaults. Channel image templates
+hashtag hints, the feed topic seed, the topic sources (`SOURCES`: rss feeds, subreddits,
+google-trends on/off) with their scoring weights (`SCORER_WEIGHTS`), and module defaults.
+Acquisition and scoring belong together: the broader a channel's sources, the heavier
+`fit` must weigh, because more off-niche topics need discarding. `.env` still overrides
+`RSS_FEEDS`/`REDDIT_SUBREDDITS`/`GOOGLE_TRENDS_ENABLED`/`SCORER_WEIGHTS` per instance.
+Channel image templates
 live in `channels/<name>/assets/templates/`. Finance-only modules are gated by
 `ENABLE_STOCKS`/`ENABLE_DIVIDEND` (profile default, `.env` override); the morning
 feed-build/milestone tick uses `DAILY_BUILD_SLOT` (defaults to `STOCK_STORY_SLOT`).

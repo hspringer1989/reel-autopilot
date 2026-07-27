@@ -47,6 +47,34 @@ WORDMARK = "TODO(<channel>): z. B. 'TECH KANAL'"       # Brandmark auf hellen St
 PHOTO_WORDMARK = ("TODO", "TODO")                       # zwei Banner-Wörter auf Foto-Covern
 MILESTONE_TAGLINE = "TODO(<channel>): Dankes-Satz mit Kanalnamen"
 
+# ── Themenbeschaffung: Quellen + Bewertung ─────────────────────────────────
+# Aus welchen Quellen der Kanal seine Themen zieht. Das ist Kanal-Identität, keine
+# Instanz-Einstellung: ein IT-Kanal liest heise, ein Finanz-Kanal liest finanzen.net.
+# Per .env übersteuerbar (RSS_FEEDS, REDDIT_SUBREDDITS); der Profil-Wert ist der Default.
+#   "rss"           Feed-URLs. Google-News-Suchen sind gewöhnliches RSS und damit hier
+#                   erlaubt: news.google.com/rss/search?q=<begriffe>&hl=de&gl=DE&ceid=DE:de
+#   "reddit"        Subreddit-Namen (der Collector startet nur mit Zugangsdaten)
+#   "google_trends" True/False — die Tages-Charts sind themenlos; für enge Nischen
+#                   meist Rauschen, das trotzdem Bewertungs-Token kostet.
+# Leere Liste bzw. False heißt: dieser Collector läuft für den Kanal gar nicht erst.
+SOURCES = {
+    "rss": ["TODO(<channel>): https://…"],
+    "reddit": ["TODO"],
+    "google_trends": False,
+}
+
+# System-Prompt der Themen-Bewertung (Haiku, gebündelt). Beschreibe die Nische und
+# vor allem, was NICHT dazugehört — breite Quellen spülen Randthemen mit herein, die
+# hier aussortiert werden müssen. Keine Platzhalter: der String wird roh übergeben.
+SCORER_SYSTEM_PROMPT = """TODO(<channel>): Bewertungs-Prompt für Themen-Kandidaten.
+Die drei Kriterien "viral", "fit" und "monetization" (je 0.0-1.0) für die eigene Nische
+beschreiben. Antworte AUSSCHLIESSLICH mit einem gültigen JSON-Array."""
+
+# Gewichtung der drei Kriterien (viral, fit, monetization) — Summe muss 1.0 ergeben.
+# Faustregel: je breiter und verrauschter die Quellen, desto schwerer muss "fit" wiegen.
+# Kanäle ohne Affiliate-Anbindung setzen "monetization" bewusst niedrig.
+SCORER_WEIGHTS = (0.45, 0.30, 0.25)
+
 # ── Reel-Skript: System-Prompt (Sonnet) ────────────────────────────────────
 # Pflicht-Platzhalter: {brand} (Kanalname) und {disclaimer} — werden per .format
 # gefüllt. Struktur (Hook, Segmente, Aha-Moment, CTA) am besten beibehalten und

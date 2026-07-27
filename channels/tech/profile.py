@@ -44,6 +44,67 @@ WORDMARK = "TECH KOMPAKT"                  # Brandmark auf hellen Story-Cards
 PHOTO_WORDMARK = ("TECH", "KOMPAKT")       # zwei Banner-Wörter auf Foto-Covern
 MILESTONE_TAGLINE = "Ihr macht Tech Kompakt zu dem, was es ist."
 
+# ── Themenbeschaffung: Quellen + Bewertung ─────────────────────────────────
+# Alle Feeds mit feedparser gegengeprüft (Stand: Kanal-Aufbau). Bewusst NICHT dabei:
+#   - die Google-News-Rubrik TECHNOLOGY: liefert überwiegend Krieg/Kriminalität statt Technik
+#   - der BSI-Newsfeed: gibt aktuell null Einträge zurück
+# google_trends bleibt aus: der Collector zieht die themenlosen Tages-Charts (Promis,
+# Sport, Wetter) und kostet dafür Bewertungs-Token. Für eine enge Nische reines Rauschen.
+SOURCES = {
+    "rss": [
+        "https://www.heise.de/rss/heise-atom.xml",          # allgemein, hohes Volumen
+        "https://www.heise.de/security/feed.xml",           # Sicherheit
+        "https://www.heise.de/developer/rss/news-atom.xml",  # Entwicklung
+        "https://www.heise.de/ix/rss/news-atom.xml",        # Profi/Administration
+        "https://rss.golem.de/rss.php?feed=RSS2.0",         # allgemein
+        "https://www.computerbase.de/rss/news.xml",         # Hardware
+        "https://t3n.de/rss.xml",                           # Digitalwirtschaft
+        "https://netzpolitik.org/feed/",                    # Datenschutz, Netzpolitik
+        "https://stadt-bremerhaven.de/feed/",               # Consumer, Apps
+        "https://the-decoder.de/feed/",                     # KI
+        # Google-News-Suchen: aggregieren viele Quellen, sind einfaches RSS.
+        "https://news.google.com/rss/search?q=k%C3%BCnstliche+intelligenz&hl=de&gl=DE&ceid=DE:de",
+        "https://news.google.com/rss/search?q=IT-Sicherheit+OR+Sicherheitsl%C3%BCcke&hl=de&gl=DE&ceid=DE:de",
+    ],
+    "reddit": ["de_EDV", "informatik", "Datenschutz", "KuenstlicheIntelligenz",
+               "cybersecurity", "LocalLLaMA"],
+    "google_trends": False,
+}
+
+SCORER_SYSTEM_PROMPT = """Du bist Content-Stratege für ein deutschsprachiges Instagram-Profil \
+zu IT und Technik (Zielgruppe: 20–45, DACH, technikinteressiert — vom Berufseinsteiger bis \
+zum IT-Profi). Das Profil postet kurze Reels mit Voiceover und ordnet Tech-Nachrichten ein, \
+statt sie nur nachzuerzählen.
+
+Bewerte Themen-Kandidaten nach drei Kriterien (jeweils 0.0–1.0):
+
+- "viral": Neugier- und Betroffenheits-Potenzial als Reel-Hook. Hoch, wenn viele Menschen \
+konkret betroffen sind (verbreitete Geräte, große Dienste, Nutzerdaten), wenn eine Zahl \
+überrascht oder ein verbreiteter Irrtum kippt. Niedrig bei bloßen Ankündigungen ohne Folgen \
+und bei reinen Versions-Updates.
+
+- "fit": Passung zur IT-/Tech-Nische. Hoch bei Sicherheitslücken, KI-Modellen und ihren \
+Auswirkungen, Betriebssystemen, Netzwerken, Datenschutz, Entwickler-Werkzeugen, Hardware \
+und Plattform-Regeln. NIEDRIG bei Themen, die Technik nur streifen: Kurs- und \
+Börsenmeldungen zu Tech-Konzernen, Personalien, Kriegs- und Politikberichte mit Drohnen- \
+oder Cyber-Bezug, Meinungsstücke ohne technischen Kern, Veranstaltungs- und Regionalmeldungen.
+
+- "monetization": kommerzielle Anschlussfähigkeit (Hardware, Software-Abos, Kurse, \
+Zertifikate). Dieses Kriterium wiegt in diesem Kanal bewusst leicht — bewerte es ehrlich \
+niedrig, wenn kein Produktbezug besteht, statt es hochzuschreiben.
+
+Nachrichten-Aggregatoren liefern dieselbe Meldung oft mehrfach in unterschiedlicher \
+Aufmachung. Bewerte jede Meldung für sich.
+
+Sei konservativ: 0.8+ nur für Themen mit klarer, aktueller Betroffenheit oder einem echten \
+Aha-Moment.
+Antworte AUSSCHLIESSLICH mit einem gültigen JSON-Array, kein Fließtext, keine Markdown-Umrandung."""
+
+# (viral, fit, monetization). "fit" wiegt schwerer als im Finanz-Kanal, weil die breiten
+# Google-News-Suchen Randthemen mitbringen, die aussortiert werden müssen. "monetization"
+# wiegt leicht, solange nichts monetarisiert wird.
+SCORER_WEIGHTS = (0.50, 0.40, 0.10)
+
 # ── Reel-Skript (Sonnet) ───────────────────────────────────────────────────
 # ACHTUNG: Dieser String wird mit .format(brand=…, disclaimer=…) gefüllt
 # (src/content/script_agent.py). Es dürfen KEINE anderen geschweiften Klammern

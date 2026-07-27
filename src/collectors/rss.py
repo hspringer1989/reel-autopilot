@@ -44,11 +44,17 @@ class RSSCollector(Collector):
 
 def active_collectors() -> list[Collector]:
     """All collectors whose credentials/config are present (trading-bot pattern:
-    collectors only start if usable)."""
+    collectors only start if usable). Which sources a channel uses comes from its
+    profile (PROFILE.SOURCES) — a collector without sources never starts, so a niche
+    channel doesn't pay scoring tokens for topics it would discard anyway."""
     from src.collectors.google_trends import GoogleTrendsCollector
     from src.collectors.reddit import RedditCollector
 
-    collectors: list[Collector] = [GoogleTrendsCollector(), RSSCollector()]
-    if config.REDDIT_CLIENT_ID and config.REDDIT_CLIENT_SECRET:
+    collectors: list[Collector] = []
+    if config.GOOGLE_TRENDS_ENABLED:
+        collectors.append(GoogleTrendsCollector())
+    if config.RSS_FEEDS:
+        collectors.append(RSSCollector())
+    if config.REDDIT_CLIENT_ID and config.REDDIT_CLIENT_SECRET and config.REDDIT_SUBREDDITS:
         collectors.append(RedditCollector())
     return collectors

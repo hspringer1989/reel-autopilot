@@ -20,17 +20,25 @@ class TrendItem:
         return hashlib.sha256(f"{self.source}:{self.title.lower()}".encode()).hexdigest()[:32]
 
 
+# Historische Gewichtung (viral, fit, monetization) aus der Zeit vor den Kanal-Profilen.
+# Bleibt der Vorgabewert, damit `total()` ohne Argument exakt wie bisher rechnet; im
+# Betrieb übergibt die Pipeline die Gewichte des aktiven Kanals (config.SCORER_WEIGHTS).
+DEFAULT_SCORER_WEIGHTS = (0.45, 0.30, 0.25)
+
+
 @dataclass
 class TrendScore:
     viral_potential: float   # 0–1: hook/emotion/shareability of the topic
-    niche_fit: float         # 0–1: fit for a German finance/investing profile
-    monetization: float      # 0–1: proximity to broker/finance affiliate offers
+    niche_fit: float         # 0–1: fit for the channel's niche (see PROFILE.SCORER_SYSTEM_PROMPT)
+    monetization: float      # 0–1: commercial follow-on potential, as defined by the channel
     reasoning: str = ""
 
-    @property
-    def total(self) -> float:
+    def total(self, weights: tuple[float, float, float] = DEFAULT_SCORER_WEIGHTS) -> float:
+        """Gewichtete Gesamtnote. Die Gewichte kommen aus dem Kanal-Profil — dieses Modul
+        hält bewusst keine config-Abhängigkeit, deshalb werden sie hereingereicht."""
+        w_viral, w_fit, w_mon = weights
         return round(
-            0.45 * self.viral_potential + 0.30 * self.niche_fit + 0.25 * self.monetization, 4
+            w_viral * self.viral_potential + w_fit * self.niche_fit + w_mon * self.monetization, 4
         )
 
 
