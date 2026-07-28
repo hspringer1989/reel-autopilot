@@ -87,7 +87,10 @@ def build_feed_post(topic_slug: str, title: str, brief: str, llm: LLMProvider) -
     # A tappable @mention of our own profile — the real "link" to follow (feed-post
     # images can't carry a clickable button).
     if config.BRAND_HANDLE and config.BRAND_HANDLE.lower() not in caption.lower():
-        caption = f"{caption}\n\nFolge {config.BRAND_HANDLE} für mehr 📈".strip()
+        # Wortlaut aus dem Profil: das frühere feste "für mehr 📈" trug ein Börsen-Emoji
+        # in die Caption jedes Kanals, auch dort, wo es nichts zu suchen hat.
+        cta = config.PROFILE.FEED_CAPTION_CTA.format(handle=config.BRAND_HANDLE)
+        caption = f"{caption}\n\n{cta}".strip()
     if config.PROFILE.DISCLAIMER_CHECK not in caption.lower():
         caption = f"{caption}\n\n⚠️ {_DISCLAIMER}".strip()
 

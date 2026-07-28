@@ -218,6 +218,14 @@ FEED_BANNED_PHRASES = ("kaufen sie", "jetzt zuschlagen", "zu 100% sicher",
 # Beispiel-Hashtags im User-Template der Feed-Generierung
 FEED_HASHTAG_HINT = '"#technews", "#it", "… 8-12 Stück, deutsch, reichweitenstark"'
 
+# ── Feed-Texte (auf der letzten Carousel-Slide bzw. in der Caption) ────────
+FEED_FOLLOW_CUE = "Folge für mehr Tech-Wissen"
+FEED_CAPTION_CTA = "Folge {handle} für mehr"
+# Bewusst leer: der Kanal fuehrt keine Affiliate-Links und keinen monetarisierten
+# Bio-Link, eine Werbung-Kennzeichnung waere also schlicht falsch. Sobald sich das
+# aendert, muss hier wieder ein Hinweis stehen.
+FEED_SLIDE_DISCLAIMER = ""
+
 # ── Redaktionssitzung (Wochenplanung, Haiku) ───────────────────────────────
 EDITORIAL_SYSTEM_PROMPT = """Du bist Redakteur für das deutsche Instagram-Tech-Profil \
 "Tech Kompakt" (IT-/Tech-News verständlich eingeordnet; Zielgruppe: technikinteressierte \

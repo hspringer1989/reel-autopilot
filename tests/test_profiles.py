@@ -15,6 +15,7 @@ _STR_KEYS = (
     "DISCLAIMER_CHECK", "WORDMARK", "MILESTONE_TAGLINE",
     "REEL_SYSTEM_PROMPT", "REEL_HASHTAG_HINT", "FEED_SYSTEM_PROMPT", "FEED_HASHTAG_HINT",
     "EDITORIAL_SYSTEM_PROMPT", "ADVICE_PATTERN", "SCORER_SYSTEM_PROMPT",
+    "FEED_FOLLOW_CUE", "FEED_CAPTION_CTA",
     "COMMENT_SYSTEM", "DM_SYSTEM", "DIGEST_SYSTEM_PROMPT",
 )
 _PALETTE_KEYS = ("BLUE", "BLUE_LIGHT", "BLUE_DEEP", "BG", "CARD", "FG", "MUTED")
@@ -98,6 +99,15 @@ def test_profile_contract(channel):
         f"{channel}: SCORER_WEIGHTS braucht drei Anteile zwischen 0 und 1"
     assert abs(sum(weights) - 1.0) < 1e-9, \
         f"{channel}: SCORER_WEIGHTS summiert sich auf {sum(weights)}, erwartet 1.0"
+
+    # Der Caption-CTA wird per .format(handle=…) gefüllt
+    assert "{handle}" in prof.FEED_CAPTION_CTA, \
+        f"{channel}: FEED_CAPTION_CTA braucht {{handle}}"
+
+    # Die Fußnote der Abschluss-Slide DARF leer sein — eine Werbung-Kennzeichnung
+    # gehört nur auf Beiträge, die auch Werbung enthalten. Deshalb steht sie nicht
+    # in _STR_KEYS, muss aber ein String sein.
+    assert isinstance(prof.FEED_SLIDE_DISCLAIMER, str)
 
     # module flags
     assert isinstance(prof.ENABLE_STOCKS, bool)

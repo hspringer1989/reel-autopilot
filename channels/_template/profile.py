@@ -99,6 +99,20 @@ FEED_BANNED_PHRASES = ("TODO",)
 
 FEED_HASHTAG_HINT = '"#TODO", "#TODO", "… 8-12 Stück, deutsch, reichweitenstark"'
 
+# ── Feed-Texte (auf der letzten Carousel-Slide bzw. in der Caption) ────────
+# Ueberschrift des Folgen-Hinweises auf der Abschluss-Slide.
+FEED_FOLLOW_CUE = "TODO(<channel>): z. B. 'Folge für mehr Tech-Wissen'"
+
+# Wird an die Caption gehaengt, falls das Modell den eigenen Handle vergessen hat.
+# Pflicht-Platzhalter: {handle}.
+FEED_CAPTION_CTA = "Folge {handle} für mehr"
+
+# Fussnote der Abschluss-Slide. DARF LEER SEIN — anders als FEED_DISCLAIMER, das
+# weiterhin das Caption-Sicherheitsnetz traegt. Eine Werbung-Kennzeichnung gehoert
+# nur auf Beitraege, die tatsaechlich Werbung enthalten; steht sie auf einem rein
+# erklaerenden Beitrag, ist sie nicht bloss ueberfluessig, sondern unzutreffend.
+FEED_SLIDE_DISCLAIMER = ""
+
 # ── Redaktionssitzung (Wochenplanung) ──────────────────────────────────────
 EDITORIAL_SYSTEM_PROMPT = """TODO(<channel>): Redakteurs-Prompt für Wochen-Themenvorschläge.
 Verwende korrekte deutsche Umlaute. Antworte AUSSCHLIESSLICH mit gültigem JSON."""

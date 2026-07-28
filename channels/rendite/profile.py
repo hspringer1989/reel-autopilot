@@ -128,6 +128,12 @@ FEED_BANNED_PHRASES = ("kaufen sie", "jetzt einsteigen", "garantierte rendite",
 # Beispiel-Hashtags im User-Template der Feed-Generierung
 FEED_HASHTAG_HINT = '"#finanzen", "#aktien", "… 8-12 Stück, deutsch, reichweitenstark"'
 
+# ── Feed-Texte (auf der letzten Carousel-Slide bzw. in der Caption) ────────
+# Uebernommen 1:1 aus dem bisherigen Engine-Code — am Ergebnis aendert sich nichts.
+FEED_FOLLOW_CUE = "Folge für mehr Analysen"
+FEED_CAPTION_CTA = "Folge {handle} für mehr 📈"
+FEED_SLIDE_DISCLAIMER = "Keine Anlageberatung · nur Bildung & Unterhaltung · Werbung"
+
 # ── Redaktionssitzung (Wochenplanung, Haiku) ───────────────────────────────
 EDITORIAL_SYSTEM_PROMPT = """Du bist Redakteur für das deutsche Instagram-Finanz-Bildungsprofil \
 "Renditeradar" (datenbasiert, Ampel aus Charttechnik + Fundamental; Zielgruppe: FORTGESCHRITTENE \

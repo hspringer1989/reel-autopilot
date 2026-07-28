@@ -13,9 +13,11 @@ from src import branding
 from src.models import FeedPost, Slide
 
 W, H = 1080, 1350
-# Der Disclaimer auf der CTA-Slide ist kanalabhängig und kommt aus dem Profil —
-# für rendite ist FEED_DISCLAIMER wortgleich mit dem zuvor fest verdrahteten Text.
-_CTA_DISCLAIMER = config.PROFILE.FEED_DISCLAIMER
+# Fußnote der CTA-Slide. Eigener Key statt FEED_DISCLAIMER, weil dieser hier leer sein
+# DARF: eine Werbung-Kennzeichnung auf einem Beitrag ohne Werbung ist nicht bloß
+# überflüssig, sondern unzutreffend. FEED_DISCLAIMER bleibt gefüllt — es trägt weiterhin
+# das Caption-Sicherheitsnetz in feedposts/generator.py.
+_CTA_DISCLAIMER = config.PROFILE.FEED_SLIDE_DISCLAIMER
 
 
 def _open_bg(path) -> "object":
@@ -51,7 +53,7 @@ def _follow_button(draw, x: int, y: int) -> int:
     """Honest follow cue (NOT a fake button): feed-post images can't carry a tappable
     link, so we point to the real follow paths — the @handle (tappable in the caption)
     and Instagram's own Folgen button at the top of the post."""
-    draw.text((x, y), "Folge für mehr Analysen", font=branding.load_font(46, bold=True),
+    draw.text((x, y), config.PROFILE.FEED_FOLLOW_CUE, font=branding.load_font(46, bold=True),
               fill=branding.BLUE)
     draw.text((x, y + 66), config.BRAND_HANDLE, font=branding.load_font(38, bold=True),
               fill=branding.BLUE_LIGHT)
@@ -72,7 +74,8 @@ def _render_hero(slide: Slide, index: int, total: int, is_cta: bool, out_path: s
     pad = 56
     content_h = len(h_lines) * h_lh + 22 + len(b_lines) * b_lh
     if is_cta:
-        content_h += 40 + 166 + 34    # follow cue (heading + handle + hint) + disclaimer
+        # follow cue (heading + handle + hint) + disclaimer line only if there is one
+        content_h += 40 + 166 + (34 if config.PROFILE.FEED_SLIDE_DISCLAIMER else 0)
     panel_h = content_h + 2 * pad
     top, bottom = 165, H - 175                   # keep clear of counter + template logo
     avail = bottom - top
@@ -89,7 +92,9 @@ def _render_hero(slide: Slide, index: int, total: int, is_cta: bool, out_path: s
     y = branding.draw_lines(draw, b_lines, x, y + 22, b_font, branding.FG, b_lh)
     if is_cta:
         y = _follow_button(draw, x, y + 40)
-        draw.text((x, y + 8), _CTA_DISCLAIMER, font=branding.load_font(22), fill=branding.MUTED)
+        if _CTA_DISCLAIMER:
+            draw.text((x, y + 8), _CTA_DISCLAIMER, font=branding.load_font(22),
+                      fill=branding.MUTED)
     return _save(base, out_path)
 
 
