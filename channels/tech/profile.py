@@ -33,7 +33,7 @@ PALETTE = {
 # Bei Affiliate-Links bleibt die "Werbung"-Kennzeichnung Pflicht.
 REEL_DISCLAIMER = "ℹ️ Nur Bildung & Einordnung — keine Kauf- oder Sicherheitsberatung."
 FEED_DISCLAIMER = "Nur Bildung & Einordnung · keine Kaufberatung · Werbung"
-CARD_FOOTER_DISCLAIMER = "Nur Bildung & Einordnung · keine Kaufberatung · Werbung"
+CARD_FOOTER_DISCLAIMER = "Nur Bildung & Einordnung"
 MILESTONE_FOOTER = "Nur Bildung & Einordnung · Danke fürs Dabeisein"
 # Lowercase-Substring: fehlt er in einer generierten Caption, hängt der Code den
 # Disclaimer als Sicherheitsnetz an (script_agent.py / feedposts/generator.py).
