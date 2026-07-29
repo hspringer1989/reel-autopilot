@@ -248,8 +248,32 @@ async def announce_new_reel(reel_id: int) -> str | None:
     return media_id
 
 
+# Nach so vielen gescheiterten Publish-Versuchen gibt ein Reel endgültig auf.
+_PUBLISH_MAX_ATTEMPTS = 3
+
+
+async def _notify_publish_failure(text: str) -> None:
+    """Best effort — eine kaputte Telegram-Zustellung darf den Publish-Pfad nie stören."""
+    from src.review.telegram_bot import review_configured, send_text
+
+    if not review_configured():
+        return
+    try:
+        await send_text(text)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Fehler-Meldung an Telegram nicht zustellbar: {exc}")
+
+
 async def publish_next_approved() -> int | None:
-    """Publish the oldest approved reel; returns its id or None if queue is empty."""
+    """Publish the oldest approved reel; returns its id or None if queue is empty.
+
+    Ein Fehlschlag verwirft das Reel nicht mehr sofort: Instagrams serverseitige
+    Verarbeitung scheitert gelegentlich transient (status ERROR — Minuten später
+    läuft dieselbe, technisch einwandfreie Datei durch). Das Reel bleibt deshalb
+    bis zu _PUBLISH_MAX_ATTEMPTS Versuche lang 'approved' und wird am jeweils
+    nächsten Slot erneut versucht; erst danach ist es 'failed'. Jeder Fehlschlag
+    wird nach Telegram gemeldet, statt nur im Log zu stehen — sonst merkt der
+    Betreiber erst am leeren Profil, dass nichts mehr rausgeht."""
     from src.publish.instagram import publish_reel
 
     with session_scope() as session:
@@ -265,8 +289,23 @@ async def publish_next_approved() -> int | None:
         logger.error(f"Publish von Reel #{reel.id} fehlgeschlagen: {exc}")
         with session_scope() as session:
             row = session.get(ReelRow, reel.id)
-            row.status = "failed"
+            row.publish_attempts += 1
             row.error = str(exc)[:2000]
+            attempts = row.publish_attempts
+            if attempts >= _PUBLISH_MAX_ATTEMPTS:
+                row.status = "failed"
+        if attempts >= _PUBLISH_MAX_ATTEMPTS:
+            await _notify_publish_failure(
+                f"🚨 Reel #{reel.id} nach {attempts} Versuchen aufgegeben:\n"
+                f"{str(exc)[:300]}\n\n"
+                f"Es wird NICHT weiter versucht — bitte Ursache prüfen."
+            )
+        else:
+            await _notify_publish_failure(
+                f"⚠️ Reel #{reel.id} konnte nicht gepostet werden "
+                f"(Versuch {attempts}/{_PUBLISH_MAX_ATTEMPTS}):\n{str(exc)[:300]}\n\n"
+                f"Bleibt in der Queue und wird zum nächsten Slot erneut versucht."
+            )
         return None
 
     with session_scope() as session:

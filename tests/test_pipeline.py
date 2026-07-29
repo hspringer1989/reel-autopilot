@@ -88,3 +88,64 @@ async def test_no_trend_above_threshold(monkeypatch):
 
     monkeypatch.setattr(config, "MIN_TREND_SCORE", 0.99)
     assert await pipeline.generate_once() is None
+
+
+async def test_publish_failure_keeps_reel_in_queue(monkeypatch):
+    """Ein transienter Instagram-Fehler darf ein freigegebenes Reel nicht endgültig
+    verwerfen: bis zur Obergrenze bleibt es 'approved' (Retry am nächsten Slot),
+    erst danach 'failed'. Vorher wurde aus jedem Schluckauf ein stiller Totalausfall."""
+    from src.publish import instagram
+
+    with session_scope() as session:
+        session.add(ReelRow(trend_id=0, video_path="x.mp4", caption="c", status="approved"))
+        session.flush()
+        reel_id = session.execute(select(ReelRow.id)).scalar_one()
+
+    async def boom(video_path, caption):
+        raise instagram.PublishError("Instagram meldet Verarbeitungsfehler (status ERROR)")
+    monkeypatch.setattr(instagram, "publish_reel", boom)
+
+    for attempt in (1, 2):
+        assert await pipeline.publish_next_approved() is None
+        with session_scope() as session:
+            row = session.get(ReelRow, reel_id)
+            assert row.status == "approved", f"nach Versuch {attempt} nicht mehr in der Queue"
+            assert row.publish_attempts == attempt
+            assert "Verarbeitungsfehler" in row.error
+
+    assert await pipeline.publish_next_approved() is None
+    with session_scope() as session:
+        row = session.get(ReelRow, reel_id)
+        assert row.status == "failed"
+        assert row.publish_attempts == 3
+
+
+async def test_publish_success_after_failure(monkeypatch):
+    """Der Normalfall des Retrys: erster Versuch scheitert, zweiter geht durch."""
+    from src.publish import instagram
+
+    with session_scope() as session:
+        session.add(ReelRow(trend_id=0, video_path="x.mp4", caption="c", status="approved"))
+        session.flush()
+        reel_id = session.execute(select(ReelRow.id)).scalar_one()
+
+    calls = {"n": 0}
+
+    async def flaky(video_path, caption):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise instagram.PublishError("transient")
+        return "IG_MEDIA_1"
+    monkeypatch.setattr(instagram, "publish_reel", flaky)
+    monkeypatch.setattr(pipeline, "announce_new_reel", _noop_announce)
+
+    assert await pipeline.publish_next_approved() is None
+    assert await pipeline.publish_next_approved() == reel_id
+    with session_scope() as session:
+        row = session.get(ReelRow, reel_id)
+        assert row.status == "published"
+        assert row.ig_media_id == "IG_MEDIA_1"
+
+
+async def _noop_announce(reel_id):
+    return None

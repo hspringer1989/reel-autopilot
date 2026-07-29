@@ -56,6 +56,9 @@ class ReelRow(Base):
     # Befunde des Quellen-Abgleichs (src/content/factcheck.py), eine Zeile je ungedecktem
     # Segment. Rein beratend: sie erscheinen in der Telegram-Freigabe, blockieren nichts.
     fact_check: Mapped[str] = mapped_column(Text, default="")
+    # Gescheiterte Publish-Versuche: unterhalb der Obergrenze bleibt das Reel 'approved'
+    # (Retry am nächsten Slot), weil Instagrams Verarbeitung transient scheitern kann.
+    publish_attempts: Mapped[int] = mapped_column(Integer, default=0)
     ig_media_id: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
     published_at: Mapped[str] = mapped_column(String(40), default="")
@@ -263,6 +266,8 @@ def _migrate(engine) -> None:
         reel_cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(reels)").fetchall()}
         if reel_cols and "fact_check" not in reel_cols:
             conn.exec_driver_sql("ALTER TABLE reels ADD COLUMN fact_check TEXT DEFAULT ''")
+        if reel_cols and "publish_attempts" not in reel_cols:
+            conn.exec_driver_sql("ALTER TABLE reels ADD COLUMN publish_attempts INTEGER DEFAULT 0")
 
 
 def _seed_feed_topics(session_factory) -> None:
