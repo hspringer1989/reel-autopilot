@@ -31,6 +31,11 @@ PROFILE = importlib.import_module(f"channels.{CHANNEL}.profile")
 # overridable per instance via .env.
 ENABLE_STOCKS = _get("ENABLE_STOCKS", str(PROFILE.ENABLE_STOCKS)).lower() == "true"
 ENABLE_DIVIDEND = _get("ENABLE_DIVIDEND", str(PROFILE.ENABLE_DIVIDEND)).lower() == "true"
+# "Link in Bio" archive website + its weekly hint story. Off unless the profile opts
+# in (getattr: a channel that never wants a site needs no SITE_* keys at all).
+ENABLE_SITE = _get("ENABLE_SITE", str(getattr(PROFILE, "ENABLE_SITE", False))).lower() == "true"
+ENABLE_BIO_HINT = _get(
+    "ENABLE_BIO_HINT", str(getattr(PROFILE, "ENABLE_BIO_HINT", False))).lower() == "true"
 
 
 # ── Claude ────────────────────────────────────────────────────────────────
@@ -224,7 +229,8 @@ OUTPUT_DIR = DATA_DIR / "reels"
 STORY_DIR = DATA_DIR / "stories"
 FEED_DIR = DATA_DIR / "feed"
 BROLL_CACHE_DIR = DATA_DIR / "broll"
+SITE_DIR = DATA_DIR / "site"          # static 'Link in Bio' website (renditeradar.eu)
 DB_PATH = DATA_DIR / "reel_autopilot.db"
 
-for _d in (DATA_DIR, OUTPUT_DIR, STORY_DIR, FEED_DIR, BROLL_CACHE_DIR):
+for _d in (DATA_DIR, OUTPUT_DIR, STORY_DIR, FEED_DIR, BROLL_CACHE_DIR, SITE_DIR):
     _d.mkdir(parents=True, exist_ok=True)

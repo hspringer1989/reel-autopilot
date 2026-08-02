@@ -23,11 +23,13 @@ from loguru import logger
 from sqlalchemy import func, select
 
 import config
-from src.storage.database import ApiUsageRow, FeedPostRow, ReelRow, init_db, session_scope
+from src.storage.database import ApiUsageRow, FeedPostRow, ReelRow, StoryRow, init_db, session_scope
 
 _LOOP_TICK_S = 60
 _GENERATE_COOLDOWN_S = 3600
 _INSIGHTS_SLOT = "07:00"
+_MILESTONE_CHECK_S = 900  # follower-milestone check interval (~15 min) so a crossed mark is pushed to review promptly
+_SITE_BUILD_S = 3600  # rebuild the static analysis-archive website hourly (cheap; only new cards copied)
 # The daily stock build normally fires exactly at STOCK_STORY_SLOT. If the process
 # is down at that minute (crash/restart/deploy), catch it up on the next tick as long
 # as we are still before this cutoff — so a restart just after 09:00 no longer loses
@@ -155,6 +157,26 @@ def cmd_post_feed(post_id: int) -> None:
     if result is None:
         raise SystemExit(f"Feed-Post #{post_id} konnte nicht gepostet werden (siehe Logs)")
     print(f"Feed-Post #{post_id} veröffentlicht (+ New-Post-Story).")
+
+
+def cmd_buildsite() -> None:
+    """Rebuild the static 'Link in Bio' analysis archive (see PROFILE.SITE_URL)."""
+    from src.site.generator import build_site
+
+    if not config.ENABLE_SITE:
+        raise SystemExit("Website-Modul ist für diesen Kanal aus (ENABLE_SITE=false)")
+    n = build_site()
+    print(f"Website neu gebaut: {n} Analysen → {config.SITE_DIR}")
+
+
+def cmd_biohint() -> None:
+    """Post the fixed weekly 'Website-Hinweis' story now (also runs Fridays 20:00)."""
+    from src.bio_hint import post_bio_hint_story
+
+    mid = asyncio.run(post_bio_hint_story())
+    if mid is None:
+        raise SystemExit("Website-Hinweis-Story konnte nicht gepostet werden (siehe Logs)")
+    print(f"Website-Hinweis-Story gepostet (IG media id {mid})")
 
 
 def cmd_community() -> None:
@@ -358,6 +380,8 @@ async def _run_loop() -> None:
     done_slots: set[tuple[str, str]] = set()  # (date, HH:MM) already handled
     last_generate = 0.0
     last_community_poll = 0.0
+    last_milestone_check = 0.0
+    last_site_build = 0.0
 
     try:
         while True:
@@ -405,13 +429,24 @@ async def _run_loop() -> None:
                 if ((slot_key[0], "stocks_build") not in done_slots
                         and config.STOCK_STORY_SLOT <= hhmm < _STOCK_BUILD_CATCHUP_UNTIL):
                     done_slots.add((slot_key[0], "stocks_build"))
-                    try:
-                        story_ids = await asyncio.to_thread(build_daily_stories)
-                        await send_stories_for_review(story_ids)
-                    except Exception as exc:  # noqa: BLE001 — a build failure must never kill the loop
-                        logger.exception(f"Tages-Story-Build fehlgeschlagen: {exc}")
-                        if review_configured():
-                            await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
+                    # Neustart-Schutz: nur bauen, wenn für HEUTE noch keine Stories existieren.
+                    # Ein Service-Neustart im Build-Fenster (bis mittags) darf sonst den ganzen
+                    # Tages-Batch ein zweites Mal erzeugen (Duplikate in der Review-Queue).
+                    with session_scope() as _sess:
+                        _have = _sess.execute(select(func.count()).select_from(StoryRow).where(
+                            StoryRow.trade_date == now.strftime("%Y-%m-%d"),
+                            StoryRow.kind.in_(("candidates", "earnings"))  # nur der echte Tages-Batch (Uebersicht/Earnings), nicht manuelle Einzel-Analysen,
+                        )).scalar()
+                    if _have:
+                        logger.info(f"Tages-Stories existieren bereits ({_have}) — Build übersprungen")
+                    else:
+                        try:
+                            story_ids = await asyncio.to_thread(build_daily_stories)
+                            await send_stories_for_review(story_ids)
+                        except Exception as exc:  # noqa: BLE001 — a build failure must never kill the loop
+                            logger.exception(f"Tages-Story-Build fehlgeschlagen: {exc}")
+                            if review_configured():
+                                await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
 
                 if publishing_configured():
                     if hhmm == config.STORY_POST_EARNINGS_SLOT and (slot_key[0], "story_morning") not in done_slots:
@@ -420,6 +455,14 @@ async def _run_loop() -> None:
                             sid = await publish_next_story(kinds=kinds)
                             if sid and review_configured():
                                 await send_text(f"📤 Story #{sid} wurde gepostet.")
+                    elif hhmm > config.STORY_POST_EARNINGS_SLOT:
+                        # Nachhol-Logik: Earnings/Watchlist erst NACH dem 09:30-Slot freigegeben →
+                        # sofort nachposten. Nur der heutige Tag — publish_next_story ist auf
+                        # trade_date==heute gelockt, postet also nie eine Story vom Vortag.
+                        for kinds in (["earnings"], ["candidates"]):
+                            sid = await publish_next_story(kinds=kinds)
+                            if sid and review_configured():
+                                await send_text(f"📤 Story #{sid} nachgeholt (nach dem 09:30-Slot freigegeben).")
                     for market, slots in (("EU", config.STORY_SLOTS_EU), ("US", config.STORY_SLOTS_US)):
                         key = (slot_key[0], f"story_{market}_{hhmm}")
                         if hhmm in slots and key not in done_slots:
@@ -435,14 +478,14 @@ async def _run_loop() -> None:
                                     f"📤 Trend-Aktien-Story ({market}, {len(trend)} Cards) gepostet."
                                 )
 
-            # 4b) follower milestones: daily check at the morning build slot; an
-            #     approved milestone card posts IMMEDIATELY on the next tick
-            #     (a thank-you story shouldn't wait for a stock-story slot).
-            if (publishing_configured() and hhmm == config.DAILY_BUILD_SLOT
-                    and (slot_key[0], "milestone_check") not in done_slots):
-                done_slots.add((slot_key[0], "milestone_check"))
-                await check_follower_milestone()
+            # 4b) follower milestones: check FREQUENTLY (not just once a day) so a freshly
+            #     crossed mark is auto-created and pushed to Telegram review within minutes;
+            #     the story posts immediately once you approve it there (no auto-post).
             if publishing_configured():
+                loop_now = asyncio.get_event_loop().time()
+                if loop_now - last_milestone_check >= _MILESTONE_CHECK_S:
+                    last_milestone_check = loop_now
+                    await check_follower_milestone()
                 for sid in await publish_approved_milestones():
                     if review_configured():
                         await send_text(f"📤 Meilenstein-Story #{sid} wurde gepostet.")
@@ -515,6 +558,26 @@ async def _run_loop() -> None:
 
                     await build_digest()
 
+            # 8) rebuild the static analysis-archive website hourly so newly posted
+            #    analyses appear; cheap (only new card images are copied).
+            loop_now = asyncio.get_event_loop().time()
+            if config.ENABLE_SITE and loop_now - last_site_build >= _SITE_BUILD_S:
+                last_site_build = loop_now
+                from src.site.generator import build_site
+
+                await asyncio.to_thread(build_site)
+
+            # 9) weekly 'Website-Hinweis' story — every Friday 20:00 (fixed card, auto-post)
+            if (config.ENABLE_BIO_HINT and publishing_configured()
+                    and now.weekday() == 4 and hhmm == "20:00"
+                    and (slot_key[0], "bio_hint") not in done_slots):
+                done_slots.add((slot_key[0], "bio_hint"))
+                from src.bio_hint import post_bio_hint_story
+
+                mid = await post_bio_hint_story()
+                if mid and review_configured():
+                    await send_text("📤 Wöchentliche Website-Hinweis-Story wurde gepostet.")
+
             await asyncio.sleep(_LOOP_TICK_S)
     finally:
         if telegram_app is not None:
@@ -552,6 +615,8 @@ def main() -> None:
                            help="Follower-Zahl vorgeben statt sie von der API zu holen")
     sub.add_parser("verify-ig")
     sub.add_parser("community")
+    sub.add_parser("buildsite")
+    sub.add_parser("biohint")
     sub.add_parser("run")
     sub.add_parser("status")
     publish = sub.add_parser("publish")
@@ -583,6 +648,10 @@ def main() -> None:
         cmd_verify_ig()
     elif args.command == "community":
         cmd_community()
+    elif args.command == "buildsite":
+        cmd_buildsite()
+    elif args.command == "biohint":
+        cmd_biohint()
     elif args.command == "run":
         asyncio.run(_run_loop())
     elif args.command == "status":
