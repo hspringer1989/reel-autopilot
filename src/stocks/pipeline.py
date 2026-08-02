@@ -125,7 +125,10 @@ def build_daily_stories(
     #    pool, so it never repeats a recently-shown ticker), analysed the same way.
     if config.STOCK_TREND_ENABLED:
         try:
-            story_ids.extend(_build_trend_story(md, llm, out_dir, trade_date, exclude))
+            # exclude today's watchlist tickers too, so the Trend-Aktie never
+            # duplicates a candidate (no double analysis of the same stock in one day)
+            trend_exclude = exclude | {c.metrics.ticker for c in candidates}
+            story_ids.extend(_build_trend_story(md, llm, out_dir, trade_date, trend_exclude))
         except Exception as exc:  # noqa: BLE001 — trend card is optional, never fatal
             logger.exception(f"Trend-Aktien-Story fehlgeschlagen — übersprungen: {exc}")
 

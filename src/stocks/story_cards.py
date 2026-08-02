@@ -242,8 +242,13 @@ def _ampel_pill(draw, right_x: int, y: int, level: str) -> None:
 
 
 def _section_title(draw, x: int, y: int, num: str, title: str, level: str) -> None:
-    draw.rounded_rectangle((x, y, x + 54, y + 54), radius=12, fill=_CHIP)
-    draw.text((x + 15, y + 8), num, font=_font(30, bold=True), fill=(255, 255, 255))
+    s = 54
+    draw.rounded_rectangle((x, y, x + s, y + s), radius=12, fill=_CHIP)
+    # center the number in the chip via its real glyph box (fixes off-centre 01/02)
+    nf = _font(30, bold=True)
+    l, t, r, b = draw.textbbox((0, 0), num, font=nf)
+    draw.text((x + (s - (r - l)) / 2 - l, y + (s - (b - t)) / 2 - t), num,
+              font=nf, fill=(255, 255, 255))
     draw.text((x + 74, y + 6), title, font=_font(44, bold=True), fill=_INK)
     _ampel_pill(draw, W - 76, y, level)
 
@@ -262,7 +267,12 @@ def _val_box(draw, x: int, y: int, label: str, value: str, color) -> None:
     w, h = 218, 122
     draw.rounded_rectangle((x, y, x + w, y + h), radius=16, fill=_tint(color))
     draw.text((x + 20, y + 16), label, font=_font(24, bold=True), fill=color)
-    draw.text((x + 20, y + 54), value, font=_font(42, bold=True), fill=color)
+    # auto-shrink the value so wide prices (e.g. '3837 GBp') never spill out of the box
+    sz = 42
+    for sz in range(42, 25, -2):
+        if draw.textlength(value, font=_font(sz, bold=True)) <= w - 40:
+            break
+    draw.text((x + 20, y + 54 + (42 - sz) // 2), value, font=_font(sz, bold=True), fill=color)
 
 
 def _dashed_hline(draw, x0: int, x1: int, y: float, color, dash: int = 16, gap: int = 12) -> None:
@@ -546,7 +556,17 @@ def _clean_name(name: str) -> str:
     """Drop legal/share-class suffixes and de-shout ALL-CAPS names for a clean label
     (e.g. 'VOLKSWAGEN AG V' → 'Volkswagen', 'BNP PARIBAS ACT.A' → 'BNP Paribas')."""
     toks = name.replace(",", " ").split()
-    while len(toks) > 1 and toks[-1].upper() in _NAME_DROP:
+    # drop legal/share-class suffixes, dangling connectors/stray letters, AND stock-exchange
+    # descriptors at the end — incl. par-value tokens with digits — so e.g.
+    # 'Wells Fargo & Company' → 'Wells Fargo', 'SAP SE I' → 'SAP',
+    # 'Shell PLC ORD Eur0.07' → 'Shell'
+    tail_drop = _NAME_DROP | {"&", "AND", "UND", "+", "I", "II", "III",
+                              "ORD", "ORD.", "REG", "REGISTERED", "NPV", "SHS", "CLASS", "CL"}
+
+    def _junk(tok: str) -> bool:
+        return tok.upper() in tail_drop or any(ch.isdigit() for ch in tok)
+
+    while len(toks) > 1 and _junk(toks[-1]):
         toks.pop()
     if name.isupper():   # keep short acronyms upper (BNP), title-case the rest
         toks = [t if (len(t) <= 3 and t.isalpha()) else t.capitalize() for t in toks]
@@ -559,6 +579,18 @@ def _truncate_px(draw, text: str, font, maxw: int) -> str:
     while text and draw.textlength(text + "…", font=font) > maxw:
         text = text[:-1]
     return text + "…" if text else text
+
+
+def _fit_name(draw, text: str, maxw: int, max_sz: int = 42, min_sz: int = 32):
+    """Return (font, text) that fits `text` into `maxw`: shrink the font from max_sz
+    down to min_sz first, and only truncate as a last resort — so full company names
+    (e.g. 'Johnson & Johnson') stay readable instead of being clipped."""
+    for sz in range(max_sz, min_sz - 1, -2):
+        f = _font(sz, bold=True)
+        if draw.textlength(text, font=f) <= maxw:
+            return f, text
+    f = _font(min_sz, bold=True)
+    return f, _truncate_px(draw, text, f, maxw)
 
 
 def _brandmark(draw, x: int, y: int) -> None:
@@ -665,27 +697,30 @@ def render_candidates_overview_card(candidates: list[Candidate], out_path: str) 
     draw.text((120, y + 16), info, font=inf, fill=_BRAND)
     y += 60 + 26
 
-    # expected time each stock's detail-analysis story goes live (EU vs US posting slots,
-    # in list order — matches how publish_next_candidate_group posts them)
+    # assign each stock its posting time (EU slots fill first, then US — matching how
+    # publish_next_candidate_group posts them), then order the list CHRONOLOGICALLY so
+    # the card reads top-to-bottom in the exact sequence the stories go live.
     eu, us = list(config.STORY_SLOTS_EU), list(config.STORY_SLOTS_US)
-    times: dict[int, str] = {}
     ei = ui = 0
+    timed: list[tuple[str, object]] = []
     for c in candidates[:5]:
         if c.metrics.market == "EU":
-            times[id(c)] = eu[min(ei, len(eu) - 1)] if eu else ""
+            t = eu[min(ei, len(eu) - 1)] if eu else ""
             ei += 1
         else:
-            times[id(c)] = us[min(ui, len(us) - 1)] if us else ""
+            t = us[min(ui, len(us) - 1)] if us else ""
             ui += 1
+        timed.append((t, c))
+    timed.sort(key=lambda p: p[0] or "99:99")
 
-    nf, tkf, sf, lf = _font(42, bold=True), _font(27, bold=True), _font(26), _font(24, bold=True)
-    for c in candidates[:5]:
+    tkf, sf, lf = _font(27, bold=True), _font(26), _font(24, bold=True)
+    for t, c in timed:
         m = c.metrics
         ch = 196
         draw.rounded_rectangle((60, y, W - 60, y + ch), radius=28, fill=_LT_CARD)
         _dark_badge(draw, 92, y + ch // 2 - 30, m.market)   # badge vertically centered
         tx = 196
-        name = _truncate_px(draw, _clean_name(m.name), nf, 360)
+        nf, name = _fit_name(draw, _clean_name(m.name), 470)   # full name, shrink before clipping
         w_name = draw.textlength(name, font=nf)
         w_tk = draw.textlength(m.ticker, font=tkf)
         w_sec = draw.textlength(m.sector, font=sf)
@@ -712,7 +747,6 @@ def render_candidates_overview_card(candidates: list[Candidate], out_path: str) 
         draw.text((x2 + 28, ay - 4), f"Fundamental: {f_lab}", font=lf, fill=_LT_INK)
 
         # right time box: light beige rounded box with "ANALYSE IN MEINER STORY" + big time
-        t = times.get(id(c), "")
         if t:
             bx0, bx1 = 788, W - 88
             draw.rounded_rectangle((bx0, y + 28, bx1, y + ch - 28), radius=18, fill=_LT_TIMEBOX)

@@ -33,6 +33,45 @@ _DISCLAIMER = "⚠️ Keine Anlageberatung — nur Bildung & Unterhaltung. Kein 
 _HOOK_QUERY = "artificial intelligence computer chip"
 _CTA_QUERY = "young person investing smartphone"
 
+# Sector → thematically fitting opening b-roll (keyword-matched against the ticker's
+# sector), so the hook clip matches the company instead of always the same AI-chip clip.
+# The b-roll registry (broll.py) then guarantees each reel gets a DIFFERENT video, even
+# for two stocks in the same sector.
+_SECTOR_BROLL = [
+    ("tech", "data center servers technology"),
+    ("communication", "smartphone digital network"),
+    ("insur", "modern office building city skyline"),
+    ("bank", "bank finance city skyline"),
+    ("financ", "stock exchange trading floor finance"),
+    ("health", "medical laboratory research science"),
+    ("pharma", "medical laboratory research science"),
+    ("energy", "power plant energy turbines"),
+    ("utilit", "electricity power grid wind turbines"),
+    ("industr", "modern factory manufacturing machines"),
+    ("material", "industrial factory production metal"),
+    ("real estate", "city skyline modern buildings"),
+    ("consumer cyclical", "shopping retail store people"),
+    ("consumer defensive", "supermarket groceries shelves"),
+]
+_DEFAULT_HOOK = "stock market financial charts"
+
+
+def _sector_hook_query(c) -> str:
+    """Opening b-roll keywords that fit the stock's sector (falls back to a generic
+    market clip). Combined with the b-roll registry this makes every reel's intro
+    both on-topic and visually distinct."""
+    name = (getattr(c.metrics, "name", "") or "").lower()
+    sec = (getattr(c.metrics, "sector", "") or "").lower()
+    # Energy/power companies (e.g. Siemens Energy) are classified under "Industrials"
+    # but need power-infrastructure footage (power plant / substation / grid), NOT a
+    # generic factory. Name keywords catch them before the broad sector mapping.
+    if any(w in name for w in ("energy", "energie", "power", "grid", "electric", "solar", "wind")):
+        return "power plant electricity substation high voltage"
+    for key, q in _SECTOR_BROLL:
+        if key in sec:
+            return q
+    return _DEFAULT_HOOK
+
 # Currency codes → spoken German (so the voice says "US-Dollar", not the letters "U-S-D").
 _CURRENCY_SPOKEN = {
     "USD": "US-Dollar", "EUR": "Euro", "GBP": "britische Pfund", "CHF": "Franken",
@@ -318,7 +357,7 @@ def build_stock_reel(ticker: str, topic: str = "", md: MarketData | None = None,
         fund_img = render_reel_fundamental_frame(c, f"{base}_fund.jpg")
         over_img = render_reel_overall_frame(c, f"{base}_over.jpg")
         broll = PexelsBroll()
-        paths = [broll.fetch(hook_query or _HOOK_QUERY, 2.0), chart_img, fund_img, over_img,
+        paths = [broll.fetch(hook_query or _sector_hook_query(c), 2.0), chart_img, fund_img, over_img,
                  broll.fetch(cta_query or _CTA_QUERY, 2.0)]
         video = render_reel(script, tts, paths, base.with_suffix(".mp4"), pick_music())
     except Exception as exc:  # noqa: BLE001
