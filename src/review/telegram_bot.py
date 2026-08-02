@@ -1,6 +1,11 @@
 """Review queue via Telegram: every rendered reel is sent with inline buttons.
 Approval decisions update the reel status; the scheduler only publishes
-status='approved'. (Same notification channel pattern as trading-bot.)"""
+status='approved'. (Same notification channel pattern as trading-bot.)
+
+Two-stage editorial flow: a week PLAN (`plan:` callbacks) is approved first, which
+generates the posts; every generated post then gets its own review (`feed:` callbacks).
+Both can be adjusted by REPLYING to their Telegram message with a free-text wish."""
+import asyncio
 from pathlib import Path
 
 from loguru import logger
@@ -141,20 +146,51 @@ async def send_photo_for_review(story_id: int, image_path: str, caption: str) ->
 def _feed_keyboard(post_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Posten", callback_data=f"feed:approve:{post_id}"),
+        InlineKeyboardButton("✏️ Ändern", callback_data=f"feed:edit:{post_id}"),
         InlineKeyboardButton("❌ Verwerfen", callback_data=f"feed:reject:{post_id}"),
     ]])
 
 
-async def send_feed_review_prompt(post_id: int, title: str, caption: str) -> None:
-    """After the slides, one text message with the caption and ✅/❌ buttons."""
+async def send_feed_review_prompt(
+    post_id: int, title: str, caption: str, scheduled_at: str = ""
+) -> int | None:
+    """After the slides, one text message with the caption and ✅/✏️/❌ buttons.
+    Returns the Telegram message id (stored so a reply can drive the edit flow)."""
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-    text = f"📰 Feed-Beitrag #{post_id} wartet auf Freigabe\n\n{title}\n\n{caption}"
+    when = f"🕒 Geplant für {scheduled_at} Uhr\n" if scheduled_at else ""
+    text = (
+        f"📰 Feed-Beitrag #{post_id} wartet auf Freigabe\n{when}\n{title}\n\n{caption}\n\n"
+        "↩️ Zum Anpassen auf diese Nachricht antworten (z. B. „kürzer, mehr Zahlen“)."
+    )
     async with bot:
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id=config.TELEGRAM_CHAT_ID, text=text[:4096],
             reply_markup=_feed_keyboard(post_id),
         )
     logger.info(f"Feed-Post #{post_id} zur Freigabe an Telegram gesendet")
+    return msg.message_id
+
+
+# ── Editorial week plan (Redaktionssitzung) ────────────────────────────────
+def _plan_keyboard(plan_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Beiträge erstellen", callback_data=f"plan:approve:{plan_id}"),
+    ], [
+        InlineKeyboardButton("🔄 Neue Themen", callback_data=f"plan:regen:{plan_id}"),
+        InlineKeyboardButton("❌ Verwerfen", callback_data=f"plan:reject:{plan_id}"),
+    ]])
+
+
+async def send_plan_review_prompt(plan_id: int, text: str) -> int | None:
+    """Send a week plan with its approval buttons; returns the Telegram message id."""
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    async with bot:
+        msg = await bot.send_message(
+            chat_id=config.TELEGRAM_CHAT_ID, text=text[:4096],
+            reply_markup=_plan_keyboard(plan_id),
+        )
+    logger.info(f"Wochenplan #{plan_id} zur Freigabe an Telegram gesendet")
+    return msg.message_id
 
 
 async def send_photo_plain(image_path: str, caption: str) -> None:
@@ -300,6 +336,72 @@ async def send_dm_for_review(
     return msg.message_id
 
 
+# Background plan builds: keep a strong reference so the task is not garbage-collected.
+_BACKGROUND: set = set()
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+
+
+async def _build_plan_and_report(plan_id: int) -> None:
+    """Generate an approved week plan in the background and report the outcome.
+    Runs detached so the button press returns immediately (generation takes minutes)."""
+    from src.feedposts.editorial import build_approved_plan
+
+    try:
+        created = await build_approved_plan(plan_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Wochenplan #{plan_id} Build fehlgeschlagen: {exc}")
+        await send_text(f"⚠️ Wochenplan #{plan_id}: Erstellung fehlgeschlagen ({exc}).")
+        return
+    if created:
+        await send_text(
+            f"✅ {len(created)} Beiträge erstellt (#{created[0]}–#{created[-1]}).\n"
+            "Jeder wartet oben einzeln auf deine Freigabe — gepostet wird erst nach ✅, "
+            "dann automatisch zur geplanten Zeit."
+        )
+    else:
+        await send_text(
+            f"⚠️ Wochenplan #{plan_id}: kein Beitrag erstellt "
+            "(Claude-Budget erschöpft oder Generierung fehlgeschlagen — siehe Logs)."
+        )
+
+
+async def _handle_plan_callback(query, action: str, plan_id: int) -> None:
+    """plan: buttons — approve starts the build, regen drafts new topics, reject drops it."""
+    from src.feedposts import editorial
+
+    plan = editorial.get_plan(plan_id)
+    if plan is None:
+        await _finish_callback(query, "⚠️ Plan nicht gefunden")
+        return
+    if plan["status"] != "pending_review":
+        await _finish_callback(query, f"Plan #{plan_id} ist bereits '{plan['status']}'")
+        return
+
+    if action == "approve":
+        if not plan["topics"]:
+            await _finish_callback(query, "⚠️ Keine Themen im Plan — bitte per Antwort Themen nennen")
+            return
+        await _finish_callback(
+            query, f"✅ Freigegeben — ich erstelle jetzt {len(plan['topics'])} Beiträge. "
+                   "Das dauert ein paar Minuten."
+        )
+        _spawn(_build_plan_and_report(plan_id))
+    elif action == "regen":
+        await _finish_callback(query, "🔄 Ich schlage neue Themen vor …")
+        editorial.set_plan_status(plan_id, "rejected")
+        _spawn(editorial.send_editorial_reminder())
+    elif action == "reject":
+        editorial.set_plan_status(plan_id, "rejected")
+        await _finish_callback(query, "❌ Verworfen — kein Beitrag wird erstellt.")
+    else:
+        await _finish_callback(query, "⚠️ Unbekannte Aktion")
+
+
 async def _finish_callback(query, note: str) -> None:
     """Strip buttons and append the outcome note to the reviewed message."""
     msg = query.message
@@ -335,6 +437,24 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
             ack = await community_dms.resolve_review(item_id, action)
         await _finish_callback(query, ack or "⚠️ Unbekannte Aktion")
+        return
+
+    # Week-plan decisions (Redaktionssitzung) — approval kicks off the post generation.
+    if query.data.startswith("plan:"):
+        try:
+            _, action, raw_id = query.data.split(":", 2)
+            await _handle_plan_callback(query, action, int(raw_id))
+        except (ValueError, AttributeError):
+            await _finish_callback(query, "⚠️ Unbekannte Aktion")
+        return
+
+    # "✏️ Ändern" only explains the reply flow — the buttons stay usable.
+    if query.data.startswith("feed:edit:"):
+        post_id = query.data.rsplit(":", 1)[-1]
+        await query.message.reply_text(
+            f"✏️ Beitrag #{post_id}: Antworte auf die Beitrags-Nachricht mit deinem "
+            "Änderungswunsch (z. B. „konkreter, mit Beispielrechnung“) — ich baue ihn neu."
+        )
         return
 
     kind, action, item_id, ack = None, None, None, None
@@ -379,8 +499,9 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _on_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Edit flow: replying (Telegram "Reply") to a community escalation with custom
-    text posts THAT text as the comment/DM reply. Restricted to the review chat."""
+    """Edit flow: replying (Telegram "Reply") with custom text adjusts whatever the
+    replied-to message was — a week plan, a feed post, or a community escalation
+    (where the text is posted verbatim). Restricted to the review chat."""
     msg = update.message
     if msg is None or msg.reply_to_message is None:
         return
@@ -393,12 +514,19 @@ async def _on_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     from src.community import comments as community_comments
     from src.community import dms as community_dms
+    from src.feedposts.editorial import resolve_plan_edit
+    from src.feedposts.pipeline import resolve_feed_edit
 
-    ack = await community_comments.resolve_edit(target_tg_id, custom)
-    if ack is None:
-        ack = await community_dms.resolve_edit(target_tg_id, custom)
-    if ack is not None:
-        await msg.reply_text(ack)
+    for resolve in (
+        lambda: resolve_plan_edit(target_tg_id, custom),
+        lambda: resolve_feed_edit(target_tg_id, custom),
+        lambda: community_comments.resolve_edit(target_tg_id, custom),
+        lambda: community_dms.resolve_edit(target_tg_id, custom),
+    ):
+        ack = await resolve()
+        if ack is not None:
+            await msg.reply_text(ack)
+            return
 
 
 def build_application() -> Application:

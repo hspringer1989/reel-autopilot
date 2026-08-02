@@ -2,6 +2,7 @@
 pending_review → Telegram review; and publish approved posts as a carousel."""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,7 +52,7 @@ def build_next_feed_post(llm: LLMProvider | None = None) -> int | None:
     caption = _full_caption(post.caption, post.hashtags)
     with session_scope() as session:
         row = FeedPostRow(
-            topic_slug=slug, title=post.title,
+            topic_slug=slug, title=post.title, brief=brief,
             slides_json=json.dumps([asdict(s) for s in post.slides], ensure_ascii=False),
             image_paths_json=json.dumps(image_paths, ensure_ascii=False),
             caption=caption, status="pending_review",
@@ -69,7 +70,8 @@ def build_next_feed_post(llm: LLMProvider | None = None) -> int | None:
 
 
 async def send_feed_for_review(post_id: int) -> None:
-    """Send the slides as context photos + one caption message with ✅/❌ buttons."""
+    """Send the slides as context photos + one caption message with ✅/✏️/❌ buttons.
+    The prompt's message id is stored so a reply to it can drive the rebuild flow."""
     from src.review.telegram_bot import (
         review_configured,
         send_feed_review_prompt,
@@ -81,13 +83,93 @@ async def send_feed_for_review(post_id: int) -> None:
         return
     with session_scope() as session:
         row = session.get(FeedPostRow, post_id)
-        data = (json.loads(row.image_paths_json), row.title, row.caption) if row else None
+        data = (json.loads(row.image_paths_json), row.title, row.caption,
+                row.scheduled_at) if row else None
     if data is None:
         return
-    image_paths, title, caption = data
+    image_paths, title, caption, scheduled_at = data
     for path in image_paths:
         await send_photo_plain(path, f"🖼 {title}")
-    await send_feed_review_prompt(post_id, title, caption)
+    msg_id = await send_feed_review_prompt(post_id, title, caption, scheduled_at)
+    if msg_id:
+        with session_scope() as session:
+            row = session.get(FeedPostRow, post_id)
+            if row is not None:
+                row.tg_message_id = str(msg_id)
+
+
+# ── Single-post revision ("✏️ Ändern" = reply to the review message) ────────
+_REBUILDS: set = set()
+
+
+def regenerate_feed_post(post_id: int, instruction: str, llm: LLMProvider | None = None) -> bool:
+    """Rebuild one post in place with the reviewer's wish (blocking: Claude + Pillow).
+    Keeps id and scheduled_at, so the post stays pinned to its planned day."""
+    llm = llm or get_llm()
+    with session_scope() as session:
+        row = session.get(FeedPostRow, post_id)
+        data = (row.topic_slug, row.title, row.brief) if row else None
+    if data is None:
+        return False
+    slug, title, brief = data
+
+    post = build_feed_post(slug, title, brief or title, llm, instruction=instruction)
+    if post is None:
+        return False
+    image_paths = render_feed_slides(post, str(config.FEED_DIR), _stamp())
+    with session_scope() as session:
+        row = session.get(FeedPostRow, post_id)
+        if row is None:
+            return False
+        row.title = post.title
+        row.slides_json = json.dumps([asdict(s) for s in post.slides], ensure_ascii=False)
+        row.image_paths_json = json.dumps(image_paths, ensure_ascii=False)
+        row.caption = _full_caption(post.caption, post.hashtags)
+        row.status = "pending_review"
+    logger.info(f"Feed-Post #{post_id} neu gebaut ('{instruction[:60]}')")
+    return True
+
+
+async def _rebuild_and_resend(post_id: int, instruction: str) -> None:
+    from src.review.telegram_bot import send_text
+
+    ok = False
+    try:
+        ok = await asyncio.to_thread(regenerate_feed_post, post_id, instruction)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Feed-Post #{post_id} Neubau fehlgeschlagen: {exc}")
+    if ok:
+        await send_feed_for_review(post_id)
+        return
+    with session_scope() as session:  # never leave the post stuck in 'rebuilding'
+        row = session.get(FeedPostRow, post_id)
+        if row is not None and row.status == "rebuilding":
+            row.status = "pending_review"
+    await send_text(
+        f"⚠️ Beitrag #{post_id} konnte nicht neu gebaut werden "
+        "(Claude-Budget oder Generierungsfehler). Der alte Stand bleibt zur Freigabe."
+    )
+
+
+async def resolve_feed_edit(tg_message_id: str, instruction: str) -> str | None:
+    """A reply to a feed-post review message: rebuild that post with the wish.
+    Returns an ack, or None if the reply did not target a pending feed post."""
+    with session_scope() as session:
+        row = session.execute(
+            select(FeedPostRow).where(
+                FeedPostRow.tg_message_id == str(tg_message_id),
+                FeedPostRow.status == "pending_review",
+            )
+        ).scalars().first()
+        if row is None:
+            return None
+        post_id = row.id
+        row.status = "rebuilding"        # blocks a stray ✅ while we regenerate
+
+    task = asyncio.create_task(_rebuild_and_resend(post_id, instruction))
+    _REBUILDS.add(task)
+    task.add_done_callback(_REBUILDS.discard)
+    return f"✏️ Beitrag #{post_id} wird mit deinem Wunsch neu gebaut — kommt gleich zur Freigabe."
 
 
 async def announce_new_feed_post(post_id: int, title: str) -> str | None:

@@ -4,6 +4,7 @@
   python main.py generate           # produce one reel end-to-end → review queue
   python main.py stocks             # build today's earnings + watchlist stories → review
   python main.py feedpost           # generate the next educational feed carousel → review
+  python main.py weekplan           # send the Redaktionssitzung (topic list) → Telegram approval
   python main.py dividendpost       # build the monthly-dividend post (yield + 2 lights) → review
   python main.py milestone          # check follower count; new milestone card → review
   python main.py verify-ig          # read-only check of the IG token/account/permissions
@@ -89,6 +90,15 @@ def cmd_feedpost() -> None:
     if pid is None:
         raise SystemExit("Kein Feed-Beitrag erstellt (Queue leer oder Generierung fehlgeschlagen)")
     print(f"Feed-Beitrag #{pid} erstellt und in die Review-Queue gestellt.")
+
+
+def cmd_weekplan() -> None:
+    """Send the Redaktionssitzung now: draft next week's topics → Telegram approval.
+    Nothing is generated until the ✅ button is pressed (handled by `main.py run`)."""
+    from src.feedposts.editorial import send_editorial_reminder
+
+    asyncio.run(send_editorial_reminder())
+    print("Redaktionssitzung an Telegram gesendet — Beiträge entstehen nach der Freigabe.")
 
 
 def cmd_stockreel(ticker: str, topic: str) -> None:
@@ -446,7 +456,7 @@ async def _run_loop() -> None:
                 with session_scope() as session:
                     pending = session.execute(
                         select(func.count()).where(
-                            FeedPostRow.status.in_(("pending_review", "approved")))
+                            FeedPostRow.status.in_(("pending_review", "rebuilding", "approved")))
                     ).scalar()
                 if not pending:
                     pid = await asyncio.to_thread(build_next_feed_post)
@@ -532,6 +542,7 @@ def main() -> None:
     sub.add_parser("generate")
     sub.add_parser("stocks")
     sub.add_parser("feedpost")
+    sub.add_parser("weekplan")
     stockreel = sub.add_parser("stockreel")
     stockreel.add_argument("--ticker", required=True)
     stockreel.add_argument("--topic", default="")
@@ -560,6 +571,8 @@ def main() -> None:
         cmd_stocks()
     elif args.command == "feedpost":
         cmd_feedpost()
+    elif args.command == "weekplan":
+        cmd_weekplan()
     elif args.command == "stockreel":
         cmd_stockreel(args.ticker, args.topic)
     elif args.command == "dividendpost":

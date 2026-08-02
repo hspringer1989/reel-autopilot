@@ -1,4 +1,5 @@
 """Feed-post generation, review, publishing. Rendering is skipped without Pillow."""
+import asyncio
 import json
 
 import pytest
@@ -170,3 +171,54 @@ async def test_announcement_can_be_disabled(monkeypatch):
         assert session.execute(
             select(StoryRow).where(StoryRow.kind == "announce")
         ).scalars().first() is None
+
+
+# ── single-post revision (reply to the review message) ─────────────────────
+def test_generator_honours_a_revision_instruction():
+    llm = FakeLLM({"feed_post": json.dumps({
+        "title": "t",
+        "slides": [{"heading": f"h{i}", "body": "Ein Satz mit Inhalt."} for i in range(4)],
+        "caption": "c", "hashtags": ["#x"],
+    })})
+    assert build_feed_post("s", "t", "b", llm, instruction="mehr Zahlen") is not None
+    assert "mehr Zahlen" in llm.calls[-1]["user"]      # the wish reaches Claude
+
+
+def test_regenerate_feed_post_keeps_id_and_slot(monkeypatch):
+    pytest.importorskip("PIL")
+    from src.feedposts import pipeline
+
+    pid = _make_post(status="rebuilding", scheduled_at="2030-01-01 17:00")
+    with session_scope() as session:
+        row = session.get(FeedPostRow, pid)
+        row.topic_slug, row.title, row.brief = "etf", "Alt-Titel", "brief"
+        old_paths = row.image_paths_json
+
+    assert pipeline.regenerate_feed_post(pid, "konkreter", builtin_fake()) is True
+    with session_scope() as session:
+        row = session.get(FeedPostRow, pid)
+        assert row.status == "pending_review"
+        assert row.scheduled_at == "2030-01-01 17:00"  # stays pinned to its day
+        assert row.image_paths_json != old_paths       # slides were re-rendered
+
+
+async def test_reply_to_a_feed_post_triggers_a_rebuild(monkeypatch):
+    from src.feedposts import pipeline
+
+    rebuilt: list[tuple] = []
+
+    async def _fake_rebuild(post_id, instruction):
+        rebuilt.append((post_id, instruction))
+    monkeypatch.setattr(pipeline, "_rebuild_and_resend", _fake_rebuild)
+
+    pid = _make_post()
+    with session_scope() as session:
+        session.get(FeedPostRow, pid).tg_message_id = "555"
+
+    assert await pipeline.resolve_feed_edit("999", "egal") is None   # unrelated message
+    ack = await pipeline.resolve_feed_edit("555", "kürzer bitte")
+    assert ack and str(pid) in ack
+    with session_scope() as session:
+        assert session.get(FeedPostRow, pid).status == "rebuilding"
+    await asyncio.gather(*pipeline._REBUILDS)
+    assert rebuilt == [(pid, "kürzer bitte")]
