@@ -115,3 +115,45 @@ def test_channel_assets_exist():
         tpl = _CHANNELS_DIR / channel / "assets" / "templates"
         for name in ("feed_bg_title.png", "feed_bg_content.png"):
             assert (tpl / name).is_file(), f"{channel}: {tpl / name} fehlt"
+
+
+_SITE_STR_KEYS = (
+    "SITE_BRAND", "SITE_URL", "SITE_IG_URL", "SITE_IG_CTA", "SITE_TAGLINE",
+    "SITE_HEADLINE", "SITE_INTRO", "SITE_HERO_DISCLAIMER", "SITE_FOOTER_DISCLAIMER",
+    "SITE_META_DESC", "SITE_SEARCH_HINT", "SITE_MIN_DATE",
+    "SITE_IMPRESSUM_NAME", "SITE_IMPRESSUM_EMAIL", "SITE_IMPRESSUM_NOTE",
+)
+
+
+@pytest.mark.parametrize("channel", _profiles())
+def test_site_contract_when_enabled(channel):
+    """A channel that switches the archive website on must carry ALL of its own brand
+    and legal values — otherwise it would publish someone else's imprint."""
+    prof = importlib.import_module(f"channels.{channel}.profile")
+    if not getattr(prof, "ENABLE_SITE", False):
+        return
+
+    for key in _SITE_STR_KEYS:
+        value = getattr(prof, key)
+        assert isinstance(value, str) and value.strip(), f"{channel}: {key} fehlt/leer"
+        assert "TODO" not in value, f"{channel}: {key} ist noch der _template-Platzhalter"
+
+    assert prof.SITE_URL.startswith("http"), f"{channel}: SITE_URL braucht ein Schema"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", prof.SITE_MIN_DATE), \
+        f"{channel}: SITE_MIN_DATE muss YYYY-MM-DD sein"
+    assert "@" in prof.SITE_IMPRESSUM_EMAIL, f"{channel}: SITE_IMPRESSUM_EMAIL ist keine Adresse"
+    address = prof.SITE_IMPRESSUM_ADDRESS
+    assert address and all(isinstance(line, str) and line.strip() for line in address), \
+        f"{channel}: SITE_IMPRESSUM_ADDRESS braucht mindestens eine Zeile"
+    assert not any("TODO" in line for line in address), \
+        f"{channel}: SITE_IMPRESSUM_ADDRESS ist noch der _template-Platzhalter"
+
+
+@pytest.mark.parametrize("channel", _profiles())
+def test_bio_hint_template_exists_when_enabled(channel):
+    """The weekly hint story posts a finished card — it must actually be in the channel."""
+    prof = importlib.import_module(f"channels.{channel}.profile")
+    if not getattr(prof, "ENABLE_BIO_HINT", False):
+        return
+    template = _CHANNELS_DIR / channel / "assets" / "templates" / prof.BIO_HINT_TEMPLATE
+    assert template.exists(), f"{channel}: BIO_HINT_TEMPLATE fehlt ({template})"

@@ -275,7 +275,44 @@ FEED_TOPIC_SEED = [
      "können. Edukativ."),
 ]
 
+# ── "Link in Bio"-Website (src/site/) ──────────────────────────────────────
+# Statisches Analyse-Archiv, das nginx unter der Domain ausliefert. Alle Texte,
+# Marken- und Rechtsangaben stehen hier, damit die Engine kanalneutral bleibt.
+SITE_BRAND = "Renditeradar"
+SITE_URL = "https://renditeradar.eu"
+SITE_IG_URL = "https://instagram.com/rendite.radar.official"
+SITE_IG_CTA = "@rendite.radar.official folgen"
+SITE_TAGLINE = "Aktien · Analysen · Finanzen"
+SITE_HEADLINE = "Alle Analysen an einem Ort"
+SITE_INTRO = ("Tägliche, datenbasierte Aktien-Analysen — Charttechnik + Fundamental, "
+              "abwägend statt Hype. Dauerhaft abrufbar, was sonst nur 24&nbsp;Stunden "
+              "in unseren Stories läuft.")
+SITE_HERO_DISCLAIMER = "⚠️ Nur Bildung &amp; Meinung — keine Anlageberatung."
+SITE_FOOTER_DISCLAIMER = (
+    "⚠️ Alle Inhalte dienen ausschließlich der Information, Bildung und Unterhaltung — "
+    "<b>keine Anlageberatung</b>, keine Kauf- oder Verkaufsempfehlung. "
+    "Jede Entscheidung triffst du eigenverantwortlich.")
+SITE_META_DESC = ("Tägliche datenbasierte Aktien-Analysen (Charttechnik + Fundamental) von "
+                  "Renditeradar, dauerhaft nach Datum abrufbar. Keine Anlageberatung.")
+SITE_SEARCH_HINT = "🔎 Aktie suchen (z. B. Nvidia, SAP) …"
+# Ältere Karten nutzen das Vor-Redesign-Layout — erst ab hier ins Archiv aufnehmen.
+SITE_MIN_DATE = "2026-07-24"
+# Impressum (§ 5 DDG / § 18 Abs. 2 MStV) — Pflichtangaben des Betreibers.
+SITE_IMPRESSUM_NAME = "Haiko Springer"
+SITE_IMPRESSUM_ADDRESS = ("Waldenburger Straße 46", "12621 Berlin, Deutschland")
+SITE_IMPRESSUM_EMAIL = "haiko.springer@googlemail.com"
+SITE_IMPRESSUM_NOTE = ("Renditeradar ist ein privates, redaktionelles Informations- und "
+                       "Bildungsangebot rund um Finanzthemen. Die Inhalte stellen keine "
+                       "Anlageberatung dar.")
+
+# Wöchentliche Website-Hinweis-Story (src/bio_hint.py): fertige Vorlage in
+# channels/<kanal>/assets/templates/, wird unverändert gepostet.
+BIO_HINT_TEMPLATE = "story-bio-hinweis.jpg"
+
 # ── Modul-Defaults (per .env überschreibbar: ENABLE_STOCKS/ENABLE_DIVIDEND) ─
 # Finanz-only-Module: tägliche Aktien-Story-Cards (src/stocks/) + Dividenden-Posts.
 ENABLE_STOCKS = True
 ENABLE_DIVIDEND = True
+# Website-Archiv + wöchentliche Hinweis-Story (ENABLE_SITE / ENABLE_BIO_HINT).
+ENABLE_SITE = True
+ENABLE_BIO_HINT = True

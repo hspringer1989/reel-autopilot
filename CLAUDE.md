@@ -11,6 +11,9 @@ python main.py collect            # collect + score trends only
 python main.py generate           # produce one reel end-to-end → review queue
 python main.py stocks             # build today's earnings + watchlist story cards → review
 python main.py feedpost           # generate the next educational feed carousel → review
+python main.py weekplan           # send the Redaktionssitzung (topic list) → Telegram approval
+python main.py buildsite          # rebuild the static 'Link in Bio' analysis archive
+python main.py biohint            # post the weekly website-hint story now
 python main.py verify-ig          # read-only check of the IG token/account/permissions
 python main.py run                # scheduler loop: review bot + story/feed slots + insights
 python main.py publish --reel 3   # manually publish a specific reel
@@ -219,6 +222,34 @@ reserved for the signal meaning, not the brand accent.
 `build_daily_stories` excludes tickers analysed in the last `STOCK_REPEAT_COOLDOWN_DAYS` (30)
 via `_recent_candidate_tickers`; `select_candidates(exclude=…)` holds them back and only reuses
 them as a last resort. `STOCK_UNIVERSE` was widened to ~90 US+EU names to feed the cooldown.
+
+### "Link in Bio" archive website — `src/site/`
+
+A static gallery of every published analysis card (stories otherwise vanish after 24h),
+rebuilt hourly from the DB by the scheduler and served by nginx from `config.SITE_DIR`.
+
+```
+StoryRow(kind in candidate|trend, published, trade_date >= PROFILE.SITE_MIN_DATE)
+        ▼  _collect() — card image + the analysis texts from analysis_json
+  _render_index()   day sections (newest first) + year/month/day filter + search
+  _render_impressum()                                      → index.html, impressum.html
+        ▼  card JPGs copied to SITE_DIR/cards/, logo from channels/<ch>/assets/brand/
+  nginx serves the domain;  datenschutz/nutzungsbedingungen are copied from PUBLIC_MEDIA_DIR
+```
+
+**Channel-neutral by contract**: brand, domain, handle, hero copy, footer and the full
+Impressum come from `PROFILE.SITE_*`; colours from `PROFILE.PALETTE`. The module is off
+unless a profile sets `ENABLE_SITE` (`tests/test_profiles.py` refuses a channel that
+enables the site while still carrying `_template` TODOs — publishing someone else's
+imprint is a legal problem, not a cosmetic one). `main.py buildsite` rebuilds on demand.
+
+`src/bio_hint.py` posts the fixed weekly "Website-Hinweis" story (Fridays 20:00, gated by
+`ENABLE_BIO_HINT`); the card is a finished template named by `PROFILE.BIO_HINT_TEMPLATE`
+in `channels/<channel>/assets/templates/`. `main.py biohint` posts it now.
+
+`morning_briefing.py` (systemd timer `reel-briefing`) sends the daily editorial plan to
+Telegram: what is approved, what is missing, plus 1–2 news-based reel ideas. All slot
+times in the message come from config, so it fits any channel.
 
 ### Community automation (DMs, comments, engagement digest) — `src/community/`
 

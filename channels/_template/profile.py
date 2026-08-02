@@ -146,7 +146,36 @@ FEED_TOPIC_SEED = [
      "TODO: 1-3 Sätze inhaltliche Leitplanken für die Generierung."),
 ]
 
+# ── "Link in Bio"-Website (src/site/) ──────────────────────────────────────
+# Nur nötig, wenn ENABLE_SITE = True. Alle Marken-, Text- und Rechtsangaben des
+# statischen Archivs — die Engine selbst kennt keinen Kanal.
+SITE_BRAND = "TODO(<channel>)"
+SITE_URL = "https://example.invalid"
+SITE_IG_URL = "https://instagram.com/TODO"
+SITE_IG_CTA = "@TODO folgen"
+SITE_TAGLINE = "TODO: kurze Themen-Zeile"
+SITE_HEADLINE = "TODO: Überschrift des Archivs"
+SITE_INTRO = "TODO: 1-2 Sätze, was das Archiv zeigt."
+SITE_HERO_DISCLAIMER = "TODO: kurzer Hinweis unter dem Intro."
+SITE_FOOTER_DISCLAIMER = "TODO: rechtlicher Hinweis im Footer."
+SITE_META_DESC = "TODO: Meta-Description für Suchmaschinen."
+SITE_SEARCH_HINT = "🔎 Suchen …"
+SITE_MIN_DATE = "1970-01-01"       # Karten ab diesem Datum ins Archiv aufnehmen
+# Impressum (§ 5 DDG / § 18 Abs. 2 MStV) — Pflichtangaben des Betreibers.
+SITE_IMPRESSUM_NAME = "TODO(<channel>)"
+SITE_IMPRESSUM_ADDRESS = ("TODO: Straße Nr.", "TODO: PLZ Ort, Land")
+SITE_IMPRESSUM_EMAIL = "todo@example.invalid"
+SITE_IMPRESSUM_NOTE = "TODO: ein Satz, was das Angebot ist und was es nicht ist."
+
+# Wöchentliche Website-Hinweis-Story (src/bio_hint.py): fertige Vorlage in
+# channels/<kanal>/assets/templates/, wird unverändert gepostet.
+BIO_HINT_TEMPLATE = "story-bio-hinweis.jpg"
+
 # ── Modul-Defaults (per .env überschreibbar) ───────────────────────────────
 # Finanz-only-Module — für Nicht-Finanz-Kanäle auf False lassen.
 ENABLE_STOCKS = False
 ENABLE_DIVIDEND = False
+# Website-Archiv + wöchentliche Hinweis-Story: erst einschalten, wenn die
+# SITE_*-Angaben oben ausgefüllt sind (sonst steht dort TODO im Impressum).
+ENABLE_SITE = False
+ENABLE_BIO_HINT = False
