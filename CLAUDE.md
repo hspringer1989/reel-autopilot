@@ -177,6 +177,36 @@ publish_feed_post (CAROUSEL)        src/publish/instagram.py  (children + media_
 `main.py feedpost` builds one now; `main.py run` generates on a feed-slot day (morning) and
 posts at the slot. `apply_feed_decision` handles the review buttons (`feed:` callback prefix).
 
+### Weekly editorial loop (Redaktionssitzung) — `src/feedposts/editorial.py`
+
+The week's posts are planned and approved entirely inside Telegram — **nothing is generated
+before the plan is approved, and nothing is posted before each single post is approved.**
+
+```
+FEED_EDITORIAL_DAY/TIME (Sun 11:00)   send_editorial_reminder
+  propose_week_topics (Haiku)  →  WeekPlanRow(pending_review)  →  Telegram message
+     [✅ Beiträge erstellen] [🔄 Neue Themen] [❌ Verwerfen]      (`plan:` callbacks)
+        │                          ↩️ reply with a wish → revise_week_topics (Haiku)
+        │                             → plan updated → re-sent for approval
+        ▼  ✅
+  build_approved_plan  (detached task; generation takes minutes)
+     generate_week_posts → one FeedPostRow per topic, scheduled_at = its day 17:00
+        ▼
+  every post individually:  slides + caption + [✅ Posten] [✏️ Ändern] [❌ Verwerfen]
+        │                   ↩️ reply with a wish → regenerate_feed_post (in place,
+        │                      keeps id + slot) → back to review
+        ▼  ✅
+  publish_due_scheduled_feed_posts posts it at its scheduled_at (+ announcement story)
+```
+
+- The proposal is **persisted** (`week_plans`) — the topic list is never lost, and the plan
+  is reachable later by its Telegram message id (`plan_by_tg_message`) for the reply flow.
+- `plan_slots` never returns a past slot: approving a plan late shifts the days forward
+  instead of publishing instantly.
+- Both reply flows are routed in `_on_reply` (plan → feed post → community escalation).
+- `main.py weekplan` sends the Redaktionssitzung on demand; the ✅ button is processed by
+  the polling loop of `main.py run`.
+
 ### Brand palette — `src/branding.py`
 
 Shared blue-on-dark Renditeradar palette (BLUE #2386D1, matching the Claude-Design templates)
@@ -236,3 +266,90 @@ scheduler tick (every COMMUNITY_POLL_MINUTES)
 
 Manual steps (Instagram/Meta app, ElevenLabs, Telegram, affiliate networks):
 see `docs/SETUP.md`. Local dev `.env` uses fakes; production values per `.env.example`.
+
+---
+
+# Reel-Redaktion — Praxiswissen (Renditeradar)
+
+Hart erarbeitetes Handwerkswissen für die manuelle Reel-Erstellung (ergänzt die Architektur oben).
+Die **lebende** Fassung liegt im Skill `reel-redakteur` (`~/.claude/skills/reel-redakteur/`:
+SKILL.md · playbook.md · build-recipes.md · LEARNINGS.md) — dort vor jedem Reel lesen, danach
+LEARNINGS ergänzen; bei Reichweiten-/Share-Daten die Playbook-Defaults verdichten.
+Grundregel: **kein öffentlicher Post ohne Telegram-✅**; rein edukativ, Disclaimer, keine Beratung.
+
+## ⭐ Gewinner-Formel (belegt: Chip-Reel ging viral)
+1. **Inhaltliche Tiefe + smarter, erklärender VERGLEICH** → wird GETEILT → Reichweite. Substanz nie
+   für Kürze opfern. Vergleichsformat (mehrere Firmen/Länder/Optionen, echte Zahlen) = Gewinner.
+2. **Heller, farbenfroher HERO-Opener** = Grid-Vorschaubild = erster Stopp.
+3. **Fluente Stimme + sauberer Text.**  4. **Aktuelles Ereignis** + **frisches, themenspezifisches Aha**.
+
+## Zwei Bau-Wege
+- **Format A — Einzelaktie:** `src/stocks/stock_reel.py::build_stock_reel(ticker, topic, md, llm,
+  texts, caption, hook_query, cta_query)`. yfinance-Realdaten; ohne Daten (frischer IPO) eigene
+  `MarketData`-Subklasse mit recherchierten Werten. `texts` = eigenes Voiceover.
+- **Format B — Vergleich/Thema (manuell, für virale Reels):** eigene PIL-Frames + `src/render/
+  renderer.py::render_reel(script, tts, broll_paths, out, music)`. `broll_paths` = 1/Segment
+  (Bild=Standbild, Video=Clip, None=Verlauf); Untertitel global aus `tts.words`. Frames mit
+  `src/branding.py`. **Muster-Skripte auf dem Server:** `build_chip_reel.py`, `build_ruestung_reel.py`,
+  `build_fed_reel.py`, `build_nuke_reel.py` (Struktur: Opener-Hook → 4 Frames → CTA, 5–6 Segmente).
+- **`title` im script_json PFLICHT** → `announce_new_reel` nimmt ihn für die „NEUES REEL"-Story;
+  fehlt er → nur „Neues Reel" (Follower wissen nicht, worum es geht).
+
+## Opener (höchste Priorität)
+- **Hell + farbenfroh + klarer HERO** (Objekt/Person/Gebäude/Tier scharf im Bild). NICHT dunkel,
+  NICHT weit/abstrakt. **Pexels-Clip per fester ID forcieren** (fetch monkeypatchen), Poster
+  (`v['image']`) VOR Nutzung sichten. Suche unzuverlässig (rocket→Spielzeug, tank→Wasserturm,
+  chip/tech→dunkel). Fehlt ein Motiv: ehrlich sagen + Alternativen zur Wahl geben.
+- Bewährte IDs: Erde-All 20349219 · Ara-Papagei 12715038 · Kühlturm+Himmel 37544749 ·
+  NYSE+Flagge 5635831 · warme Farbwellen 34336248 · buntes Paint 9668305 (CTA).
+
+## Frame-Safe-Zone
+Inhalt nur y≈290–1250 (`TOP=290`). Oben ~15 % frei (IG-Profilname), unten Untertitel (ASS
+`MarginV=500`). **Am echten Video-Frame verifizieren** (`ffmpeg -ss t -i reel.mp4 -frames:v 1`).
+Engine-Frames in `stock_reel.py` sitzen noch zu hoch (offener PR-Fix).
+
+## Stimme / Text (STRIKT)
+- Stimme = **Thomas** `5faieqDE3osz75KiOI2M` (DE), Settings **0.40 / 0.40 / 1.06** — nicht ohne
+  Anlass wechseln (Konsistenz). Fluss kommt v. a. über sauberen Text.
+- **Zahlen IMMER als Wörter** im Voiceover („hundertfünfundzwanzig", „sechsundachtzig Dollar") —
+  bloße Ziffern nuschelt die Engine. Frames zeigen Ziffern.
+- **Knifflige Wörter phonetisch:** „Uran" → „Uraan"; lange Komposita auflösen. Frames behalten die
+  korrekte Schreibweise. Audio kann ich nicht hören → User gegenchecken lassen.
+
+## Inhalt
+- Aufhänger = **aktuelles Ereignis**, per WebSearch verifizieren (Datum + Zahlen).
+- **⏱️ DATUM NENNEN (PFLICHT):** nie nur „heute"/„gestern" — immer das konkrete Datum (Voiceover
+  UND Frames), z. B. „am 29. Juli 2026", „Stand Ende Juli 2026". Reels bleiben dauerhaft online.
+- Verifikation vor dem Senden: je Frame ein echtes Video-Frame prüfen (Opener hell/bunt/Hero?
+  Safe-Zone? Untertitel frei? Zahlen korrekt?).
+
+## Veröffentlichung
+- **Reel 09:00:** `publish_next_approved()` postet das ÄLTESTE freigegebene Reel + Ankündigung.
+  → vor 09:00 freigeben; sicherstellen, dass KEIN anderes Reel 'approved' ist; Ersatz-Reels auf
+  `rejected`.
+- **Custom-Zeit (12:00/15:00/15:30):** kein Auto-Slot → **detached Watcher** (`setsid nohup … &`),
+  der bei (`approved` UND Zielzeit) postet (`publish_reel`+`announce_new_reel` bzw. `_publish_one`
+  für Stories). Doppelvarianten: Watcher wählt die freigegebene, verwirft die andere.
+- **Tages-Stories:** date-locked auf heute; **Nachhol-Logik** postet nach 09:30 freigegebene
+  Earnings/Watchlist binnen ~60 s. **Feed-Carousels:** `FEED_POST_SLOTS` täglich 17:00 ODER
+  `scheduled_at` pro Post; Ankündigung eingebaut („freigegeben ≠ eingeplant"). **Meilenstein-Story**
+  bei 500/1000/… (auto, postet nach ✅). **Follower-Wunsch:** `build_candidate_for_ticker(…,
+  category="FOLLOWER-WUNSCH · @handle")`.
+
+## Deploy & Gotchas
+- **gzip-Transfer** (cat truncatet bei Reset); `-o ServerAliveInterval=10`.
+- **Nach `generator.py`/`main.py`-Änderung Service-Restart** — aber vormittags nur mit
+  Doppel-Batch-Schutz. Der Dienst überschreibt CLI-`buildsite` mit altem In-Memory-Generator →
+  gegen die LIVE-Seite verifizieren.
+- **Doppel-Batch-Guard** (main.py): Build überspringen nur, wenn `kind IN ('candidates','earnings')`
+  für heute existiert (NICHT manuelle `'candidate'` — eine früh erstellte Einzel-Analyse wie GRAB
+  hat sonst den Tages-Build blockiert).
+- **Instant-Publish:** Reel-„Posten" setzt nur `approved` (postet am Slot); Feed-Posts posten sofort.
+- **Multichannel:** Engine mit dem Kanal des Bruders geteilt → **Engine-Änderungen nur per PR**,
+  nichts kanalabhängiges hardcoden. Direkte Server-Edits sind Notlösung, danach committen/PR'en.
+
+## Verwandte Tools
+- Skill `reel-redakteur` (selbstlernend). Morgen-Briefing (systemd-Timer `reel-briefing` 08:00 →
+  Telegram-Tagesplan + Freigabe-Lücken + News-Reel-Ideen, `morning_briefing.py`). Website
+  renditeradar.eu (Generator, Cutoff 24.07., Jahr/Monat/Tag-Filter, wöchentl. Website-Hinweis-Story
+  Fr 20:00 ohne Freigabe). Skill `insta-kommentar` + Kommentar-Studio (eigener Rendite-Radar-Key).

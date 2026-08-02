@@ -108,8 +108,28 @@ class FeedPostRow(Base):
     error: Mapped[str] = mapped_column(Text, default="")
     ig_media_id: Mapped[str] = mapped_column(String(64), default="")
     scheduled_at: Mapped[str] = mapped_column(String(20), default="", index=True)  # local "YYYY-MM-DD HH:MM"
+    brief: Mapped[str] = mapped_column(Text, default="")              # topic guidance (for re-generation)
+    tg_message_id: Mapped[str] = mapped_column(String(32), default="", index=True)  # review prompt → reply-to edit
     created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
     published_at: Mapped[str] = mapped_column(String(40), default="")
+
+
+class WeekPlanRow(Base):
+    """A proposed editorial week plan (Redaktionssitzung) awaiting the user's ✅ in
+    Telegram. Only after approval are the actual posts generated — each of which then
+    goes through its own single-post review.
+    status: pending_review | building | built | rejected | failed"""
+    __tablename__ = "week_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    week_start: Mapped[str] = mapped_column(String(10), index=True, default="")  # YYYY-MM-DD (Monday)
+    topics_json: Mapped[str] = mapped_column(Text, default="")   # [{slug, title, brief}, …]
+    status: Mapped[str] = mapped_column(String(16), default="pending_review", index=True)
+    tg_message_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    post_ids_json: Mapped[str] = mapped_column(Text, default="")  # ids created on approval
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40), default=_utcnow)
+    decided_at: Mapped[str] = mapped_column(String(40), default="")
 
 
 # Seed backlog comes from the channel profile (seeding is idempotent by slug, so an
@@ -260,6 +280,10 @@ def _migrate(engine) -> None:
         feed_cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(feed_posts)").fetchall()}
         if feed_cols and "scheduled_at" not in feed_cols:
             conn.exec_driver_sql("ALTER TABLE feed_posts ADD COLUMN scheduled_at VARCHAR(20) DEFAULT ''")
+        if feed_cols and "brief" not in feed_cols:
+            conn.exec_driver_sql("ALTER TABLE feed_posts ADD COLUMN brief TEXT DEFAULT ''")
+        if feed_cols and "tg_message_id" not in feed_cols:
+            conn.exec_driver_sql("ALTER TABLE feed_posts ADD COLUMN tg_message_id VARCHAR(32) DEFAULT ''")
         reel_cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(reels)").fetchall()}
         if reel_cols and "fact_check" not in reel_cols:
             conn.exec_driver_sql("ALTER TABLE reels ADD COLUMN fact_check TEXT DEFAULT ''")

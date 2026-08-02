@@ -48,14 +48,19 @@ def _sanitise(text: str) -> str:
     return cleaned
 
 
-def build_feed_post(topic_slug: str, title: str, brief: str, llm: LLMProvider) -> FeedPost | None:
-    """One budget-gated Claude call → a FeedPost, or None if unavailable/invalid."""
+def build_feed_post(topic_slug: str, title: str, brief: str, llm: LLMProvider,
+                    instruction: str = "") -> FeedPost | None:
+    """One budget-gated Claude call → a FeedPost, or None if unavailable/invalid.
+    `instruction` carries the reviewer's revision wish when a post is rebuilt."""
     if claude_budget_exceeded():
         logger.warning("Claude-Budget erschöpft — kein Feed-Post generiert")
         return None
 
     user = _USER_TEMPLATE.format(title=title, brief=brief,
                                  hashtag_hint=config.PROFILE.FEED_HASHTAG_HINT)
+    if instruction.strip():
+        user += (f"\n\nWICHTIG — der Redakteur wünscht ausdrücklich:\n„{instruction.strip()}\"\n"
+                 "Setze diesen Wunsch um; alles andere bleibt wie beschrieben.")
     data = None
     for attempt in range(2):
         try:
