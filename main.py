@@ -26,6 +26,10 @@ import config
 from src.storage.database import ApiUsageRow, FeedPostRow, ReelRow, StoryRow, init_db, session_scope
 
 _LOOP_TICK_S = 60
+# A slot stays eligible this many minutes after its nominal time. The tick drifts
+# forward (sleep happens AFTER the work), so an exact-minute comparison silently loses
+# slots — see _slot_due() for the incident this fixes.
+_SLOT_GRACE_MIN = 15
 _GENERATE_COOLDOWN_S = 3600
 _INSIGHTS_SLOT = "07:00"
 _MILESTONE_CHECK_S = 900  # follower-milestone check interval (~15 min) so a crossed mark is pushed to review promptly
@@ -46,6 +50,54 @@ def _feed_slots_today(now: datetime) -> list[str]:
 
 def _now_local() -> datetime:
     return datetime.now(ZoneInfo(config.TIMEZONE))
+
+
+def _to_minutes(hhmm: str) -> int:
+    hours, minutes = hhmm.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def _slot_due(hhmm: str, slot: str, grace: int = _SLOT_GRACE_MIN) -> bool:
+    """True from `slot` until `grace` minutes after it — instead of an exact match.
+
+    The scheduler sleeps `_LOOP_TICK_S` seconds AFTER finishing a tick's work, so the
+    wake-up moment drifts forward and a given minute can be skipped entirely.
+
+    Observed on 09.08.2026: one tick ran at 09:00:00 (stamped "08:59", because the clock
+    is read at the top of the loop) and the next at 09:01:09. `"09:00" in POSTING_SLOTS`
+    therefore never matched — the approved reel was silently not published, and because
+    the block was never entered, nothing was logged either. The same drift had already
+    eaten a 09:00 reel slot in July, which we misdiagnosed as a restart side effect.
+
+    Matching a short window makes a skipped minute recoverable on the next tick. The
+    per-day `done_slots` marker still guarantees that each slot acts exactly once.
+    """
+    return 0 <= _to_minutes(hhmm) - _to_minutes(slot) <= grace
+
+
+def _reel_already_posted_today(day: str) -> bool:
+    """Restart-safe guard: did a reel already go out on this local day?
+
+    `done_slots` lives in memory only, so a restart inside the catch-up window would
+    otherwise let the slot fire a second time — and `publish_next_approved` would then
+    publish the NEXT approved reel, i.e. tomorrow's, a day early.
+    """
+    with session_scope() as session:
+        stamps = session.execute(
+            select(ReelRow.published_at)
+            .where(ReelRow.status == "published", ReelRow.published_at.isnot(None))
+            .order_by(ReelRow.id.desc()).limit(20)
+        ).scalars().all()
+    for stamp in stamps:
+        try:
+            when = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if when.astimezone(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d") == day:
+            return True
+    return False
 
 
 def cmd_collect() -> None:
@@ -387,6 +439,7 @@ async def _run_loop() -> None:
         while True:
             now = _now_local()
             slot_key = (now.strftime("%Y-%m-%d"), now.strftime("%H:%M"))
+            hhmm = now.strftime("%H:%M")
 
             # 1) reviewer asked for a re-generation
             regenerated = await asyncio.to_thread(handle_regenerates)
@@ -410,21 +463,29 @@ async def _run_loop() -> None:
                 last_generate = asyncio.get_event_loop().time()
                 await generate_once()
 
-            # 3) posting slots
-            if (
-                publishing_configured()
-                and now.strftime("%H:%M") in config.POSTING_SLOTS
-                and slot_key not in done_slots
-            ):
-                done_slots.add(slot_key)
-                published = await publish_next_approved()
-                if published and review_configured():
-                    await send_text(f"📤 Reel #{published} wurde gepostet.")
+            # 3) posting slots — windowed, so a tick that skips the exact minute still posts
+            if publishing_configured():
+                for slot in config.POSTING_SLOTS:
+                    key = (slot_key[0], f"reel_{slot}")
+                    if not _slot_due(hhmm, slot) or key in done_slots:
+                        continue
+                    done_slots.add(key)
+                    late = hhmm != slot
+                    if late and await asyncio.to_thread(_reel_already_posted_today, slot_key[0]):
+                        logger.info(f"Reel-Slot {slot}: heute wurde bereits gepostet — übersprungen")
+                        continue
+                    if late:
+                        logger.warning(
+                            f"Reel-Slot {slot} wurde vom Tick übersprungen — hole um {hhmm} nach"
+                        )
+                    published = await publish_next_approved()
+                    if published and review_configured():
+                        hint = " (nachgeholt)" if late else ""
+                        await send_text(f"📤 Reel #{published} wurde gepostet{hint}.")
 
             # 4) daily stock stories (ENABLE_STOCKS channels only): build once at
             #    STOCK_STORY_SLOT, then post the approved cards at their slots
             #    (earnings/overview morning, candidates at their market's trading hours).
-            hhmm = now.strftime("%H:%M")
             if config.ENABLE_STOCKS:
                 if ((slot_key[0], "stocks_build") not in done_slots
                         and config.STOCK_STORY_SLOT <= hhmm < _STOCK_BUILD_CATCHUP_UNTIL):
@@ -449,7 +510,8 @@ async def _run_loop() -> None:
                                 await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
 
                 if publishing_configured():
-                    if hhmm == config.STORY_POST_EARNINGS_SLOT and (slot_key[0], "story_morning") not in done_slots:
+                    if (_slot_due(hhmm, config.STORY_POST_EARNINGS_SLOT)
+                            and (slot_key[0], "story_morning") not in done_slots):
                         done_slots.add((slot_key[0], "story_morning"))
                         for kinds in (["earnings"], ["candidates"]):
                             sid = await publish_next_story(kinds=kinds)
@@ -464,9 +526,15 @@ async def _run_loop() -> None:
                             if sid and review_configured():
                                 await send_text(f"📤 Story #{sid} nachgeholt (nach dem 09:30-Slot freigegeben).")
                     for market, slots in (("EU", config.STORY_SLOTS_EU), ("US", config.STORY_SLOTS_US)):
-                        key = (slot_key[0], f"story_{market}_{hhmm}")
-                        if hhmm in slots and key not in done_slots:
+                        for slot in slots:
+                            key = (slot_key[0], f"story_{market}_{slot}")
+                            if not _slot_due(hhmm, slot) or key in done_slots:
+                                continue
                             done_slots.add(key)
+                            if hhmm != slot:
+                                logger.warning(
+                                    f"Story-Slot {slot} ({market}) übersprungen — hole um {hhmm} nach"
+                                )
                             posted = await publish_next_candidate_group(market=market)
                             trend = await publish_next_candidate_group(market=market, kind="trend")
                             if posted and review_configured():
@@ -493,7 +561,7 @@ async def _run_loop() -> None:
             # 5) feed posts (2×/week): generate on a feed-slot day at the morning build
             #    tick, post at the exact slot time (weekday + HH:MM).
             feed_today = _feed_slots_today(now)
-            if (feed_today and hhmm == config.DAILY_BUILD_SLOT
+            if (feed_today and _slot_due(hhmm, config.DAILY_BUILD_SLOT)
                     and (slot_key[0], "feed_build") not in done_slots):
                 done_slots.add((slot_key[0], "feed_build"))
                 with session_scope() as session:
@@ -510,8 +578,12 @@ async def _run_loop() -> None:
                 for slot in feed_today:
                     slot_time = slot.split()[1]
                     key = (slot_key[0], f"feed_post_{slot_time}")
-                    if hhmm == slot_time and key not in done_slots:
+                    if _slot_due(hhmm, slot_time) and key not in done_slots:
                         done_slots.add(key)
+                        if hhmm != slot_time:
+                            logger.warning(
+                                f"Feed-Slot {slot_time} übersprungen — hole um {hhmm} nach"
+                            )
                         pid = await publish_next_feed_post()
                         if pid and review_configured():
                             await send_text(f"📤 Feed-Beitrag #{pid} wurde gepostet.")
@@ -523,7 +595,7 @@ async def _run_loop() -> None:
 
             # 5b) weekly editorial reminder + auto topic proposal (Sunday)
             if (now.weekday() == _WEEKDAYS.get(config.FEED_EDITORIAL_DAY.upper(), 6)
-                    and hhmm == config.FEED_EDITORIAL_TIME
+                    and _slot_due(hhmm, config.FEED_EDITORIAL_TIME)
                     and (slot_key[0], "editorial") not in done_slots):
                 done_slots.add((slot_key[0], "editorial"))
                 from src.feedposts.editorial import send_editorial_reminder
@@ -531,7 +603,7 @@ async def _run_loop() -> None:
                 await send_editorial_reminder()
 
             # 6) daily insights
-            if now.strftime("%H:%M") == _INSIGHTS_SLOT and (slot_key[0], "insights") not in done_slots:
+            if _slot_due(hhmm, _INSIGHTS_SLOT) and (slot_key[0], "insights") not in done_slots:
                 done_slots.add((slot_key[0], "insights"))
                 if publishing_configured():
                     await _fetch_daily_insights()
@@ -551,7 +623,7 @@ async def _run_loop() -> None:
 
                         await poll_dms()
                 if (config.COMMUNITY_DIGEST_ENABLED
-                        and hhmm == config.COMMUNITY_DIGEST_SLOT
+                        and _slot_due(hhmm, config.COMMUNITY_DIGEST_SLOT)
                         and (slot_key[0], "digest") not in done_slots):
                     done_slots.add((slot_key[0], "digest"))
                     from src.community.digest import build_digest
@@ -569,7 +641,7 @@ async def _run_loop() -> None:
 
             # 9) weekly 'Website-Hinweis' story — every Friday 20:00 (fixed card, auto-post)
             if (config.ENABLE_BIO_HINT and publishing_configured()
-                    and now.weekday() == 4 and hhmm == "20:00"
+                    and now.weekday() == 4 and _slot_due(hhmm, "20:00")
                     and (slot_key[0], "bio_hint") not in done_slots):
                 done_slots.add((slot_key[0], "bio_hint"))
                 from src.bio_hint import post_bio_hint_story
