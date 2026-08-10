@@ -28,6 +28,34 @@ MILESTONE_FOOTER = "Keine Anlageberatung · Danke fürs Dabeisein"
 # Disclaimer als Sicherheitsnetz an (script_agent.py / feedposts/generator.py).
 DISCLAIMER_CHECK = "anlageberatung"
 
+# ── KI-Transparenz (EU KI-VO Art. 50, verbindlich seit 02.08.2026) ─────────
+# Vier Pflichtenkreise, davon treffen uns drei:
+#  · Art. 50 Abs. 1 — wer direkt mit einem KI-System interagiert, muss das wissen
+#    (unsere automatischen Antworten auf Kommentare und DMs)  -> AI_DISCLOSURE_CHAT
+#  · Art. 50 Abs. 4 UAbs. 1 — KI-erzeugte Audio-/Video-Inhalte, die authentisch
+#    wirken, sind offenzulegen. Unsere Reels haben eine synthetische Sprecherstimme
+#    -> AI_DISCLOSURE_CAPTION + AI_DISCLOSURE_FOOTER (im Bild eingebrannt)
+#  · Art. 50 Abs. 4 UAbs. 2 — KI-erzeugte TEXTE zu Themen von öffentlichem Interesse.
+#    Greift für unsere Finanzinhalte; die Ausnahme "substanzielle menschliche Prüfung
+#    mit redaktioneller Verantwortung" liegt durch die Telegram-Freigabe zwar vor,
+#    wir kennzeichnen aber trotzdem  -> AI_DISCLOSURE_TEXT
+# Nicht unsere Pflicht: die maschinenlesbare Markierung nach Art. 50 Abs. 2 trifft
+# die ANBIETER der KI-Systeme (ElevenLabs, Anthropic), nicht uns als Betreiber.
+AI_DISCLOSURE_CAPTION = (
+    "🤖 KI-Hinweis: Sprecherstimme und Texte dieses Beitrags wurden mit KI erstellt, "
+    "Auswahl und Freigabe erfolgen redaktionell durch einen Menschen."
+)
+AI_DISCLOSURE_TEXT = (
+    "🤖 KI-Hinweis: Die Texte dieses Beitrags wurden mit KI erstellt, Auswahl und "
+    "Freigabe erfolgen redaktionell durch einen Menschen."
+)
+# Kurzform für eingebrannte Bild-Fußzeilen (Story-Cards, Reel-Frames, Feed-Slides)
+AI_DISCLOSURE_FOOTER = "KI-generiert"
+# Art. 50 Abs. 1: muss BEI DER ERSTEN Interaktion erscheinen, nicht im Kleingedruckten.
+AI_DISCLOSURE_CHAT = "🤖 Automatische Antwort (KI)"
+# Sicherheitsnetz-Substring, analog zu DISCLAIMER_CHECK
+AI_DISCLOSURE_CHECK = "ki-hinweis"
+
 # ── Wortmarke / visuelle Identität ─────────────────────────────────────────
 WORDMARK = "RENDITE RADAR"                 # brandmark on light story cards
 PHOTO_WORDMARK = ("RENDITE", "RADAR")      # two-banner wordmark on photo covers
@@ -291,7 +319,10 @@ SITE_HERO_DISCLAIMER = "⚠️ Nur Bildung &amp; Meinung — keine Anlageberatun
 SITE_FOOTER_DISCLAIMER = (
     "⚠️ Alle Inhalte dienen ausschließlich der Information, Bildung und Unterhaltung — "
     "<b>keine Anlageberatung</b>, keine Kauf- oder Verkaufsempfehlung. "
-    "Jede Entscheidung triffst du eigenverantwortlich.")
+    "Jede Entscheidung triffst du eigenverantwortlich.<br>"
+    "🤖 <b>KI-Hinweis:</b> Die Analysetexte dieser Seite werden mit Unterstützung "
+    "künstlicher Intelligenz erstellt. Auswahl, Prüfung und Freigabe erfolgen "
+    "redaktionell durch einen Menschen.")
 SITE_META_DESC = ("Tägliche datenbasierte Aktien-Analysen (Charttechnik + Fundamental) von "
                   "Renditeradar, dauerhaft nach Datum abrufbar. Keine Anlageberatung.")
 SITE_SEARCH_HINT = "🔎 Aktie suchen (z. B. Nvidia, SAP) …"

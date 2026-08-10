@@ -15,7 +15,9 @@ from src.models import FeedPost, Slide
 W, H = 1080, 1350
 # Der Disclaimer auf der CTA-Slide ist kanalabhängig und kommt aus dem Profil —
 # für rendite ist FEED_DISCLAIMER wortgleich mit dem zuvor fest verdrahteten Text.
-_CTA_DISCLAIMER = config.PROFILE.FEED_DISCLAIMER
+# Dazu der KI-Hinweis nach EU KI-VO Art. 50: Wer das Karussell ohne Caption sieht
+# (Vollbild-Ansicht), soll die Kennzeichnung trotzdem lesen können.
+_CTA_DISCLAIMER = f"{config.PROFILE.FEED_DISCLAIMER} · {config.PROFILE.AI_DISCLOSURE_FOOTER}"
 
 
 def _open_bg(path) -> "object":
