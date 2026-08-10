@@ -48,10 +48,19 @@ def _new_card():
     return img, draw
 
 
+def footer_text() -> str:
+    """Disclaimer + KI-Hinweis für die eingebrannte Fußzeile.
+
+    Story-Cards backen allen Text ins Bild (Graph-API-Stories tragen weder Sticker
+    noch Links), deshalb muss die Kennzeichnung nach EU KI-VO Art. 50 mit ins Bild —
+    ein Hinweis nur in der Caption erreicht den Betrachter der Story nicht.
+    """
+    return f"{config.PROFILE.CARD_FOOTER_DISCLAIMER} · {config.PROFILE.AI_DISCLOSURE_FOOTER}"
+
+
 def _footer(draw) -> None:
-    disclaimer = config.PROFILE.CARD_FOOTER_DISCLAIMER
     draw.line((60, H - 150, W - 60, H - 150), fill=_MUTED, width=2)
-    draw.text((60, H - 130), disclaimer, font=_font(26), fill=_MUTED)
+    draw.text((60, H - 130), footer_text(), font=_font(26), fill=_MUTED)
 
 
 def _wrap(draw, text: str, font, x: int, y: int, width_chars: int, fill, line_h: int) -> int:
@@ -429,8 +438,7 @@ def render_analysis_card(c: Candidate, out_path: str) -> str:
     body_fill = _BRAND if c.trend_reason else _INK_SOFT
     _draw_fit(draw, body, (250, yy + 6, W - 76, y + fzh - 22), body_fill, 30, 22)
 
-    draw.text((44, H - 62), config.PROFILE.CARD_FOOTER_DISCLAIMER,
-              font=_font(24), fill=_MUTED)
+    draw.text((44, H - 62), footer_text(), font=_font(24), fill=_MUTED)
     return _save(img, out_path)
 
 
@@ -620,8 +628,7 @@ def _dark_badge(draw, x: int, y: int, market: str) -> int:
 
 
 def _lt_footer(draw) -> None:
-    draw.text((44, H - 62), config.PROFILE.CARD_FOOTER_DISCLAIMER,
-              font=_font(20), fill=_LT_GREY)
+    draw.text((44, H - 62), footer_text(), font=_font(20), fill=_LT_GREY)
     hf = _font(22, bold=True)
     draw.text((W - 44 - draw.textlength(config.BRAND_HANDLE, font=hf), H - 63),
               config.BRAND_HANDLE, font=hf, fill=_LT_INK)

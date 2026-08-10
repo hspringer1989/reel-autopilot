@@ -79,8 +79,33 @@ async def _ingest(api: CommunityAPI) -> list[int]:
     return new_ids
 
 
-async def _post_reply(row_id: int, api: CommunityAPI, text: str) -> bool:
-    """Post a reply to the comment and mark the row replied. False on API error."""
+def mark_ai_reply(text: str) -> str:
+    """Prefix an automated reply with the AI disclosure (EU KI-VO Art. 50 Abs. 1).
+
+    Whoever interacts directly with an AI system has to be told so **at the first
+    interaction** — a note buried in a bio, in the terms or three messages later does
+    not satisfy the article. A prefix is therefore the only placement that reliably
+    works for a single comment reply, which may well be the only message this person
+    ever sees from us.
+
+    Idempotent: re-marking an already marked text is a no-op.
+    """
+    marker = config.PROFILE.AI_DISCLOSURE_CHAT
+    if not marker or text.lstrip().startswith(marker):
+        return text
+    return f"{marker}\n{text}"
+
+
+async def _post_reply(row_id: int, api: CommunityAPI, text: str,
+                      ai_generated: bool = True) -> bool:
+    """Post a reply to the comment and mark the row replied. False on API error.
+
+    `ai_generated=False` is for text a human typed themselves (the Telegram edit
+    flow) — that is a human reply through an automated channel, not an interaction
+    with an AI system, so it carries no AI marker.
+    """
+    if ai_generated:
+        text = mark_ai_reply(text)
     with session_scope() as session:
         row = session.get(CommentRow, row_id)
         ig_id = row.ig_comment_id
@@ -248,5 +273,5 @@ async def resolve_edit(tg_message_id: str, custom_text: str) -> str | None:
         if row.status not in ("pending_review", "escalated"):
             return f"Kommentar #{row.id} ist bereits '{row.status}'"
         row_id = row.id
-    ok = await _post_reply(row_id, get_api(), custom_text)
+    ok = await _post_reply(row_id, get_api(), custom_text, ai_generated=False)
     return "✅ Deine Antwort wurde gepostet" if ok else "⚠️ Antwort konnte nicht gepostet werden"

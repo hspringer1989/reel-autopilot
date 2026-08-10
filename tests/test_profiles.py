@@ -16,6 +16,9 @@ _STR_KEYS = (
     "REEL_SYSTEM_PROMPT", "REEL_HASHTAG_HINT", "FEED_SYSTEM_PROMPT", "FEED_HASHTAG_HINT",
     "EDITORIAL_SYSTEM_PROMPT", "ADVICE_PATTERN", "SCORER_SYSTEM_PROMPT",
     "COMMENT_SYSTEM", "DM_SYSTEM", "DIGEST_SYSTEM_PROMPT",
+    # EU KI-VO Art. 50 — ohne diese Hinweise darf ein Kanal nicht veröffentlichen
+    "AI_DISCLOSURE_CAPTION", "AI_DISCLOSURE_TEXT", "AI_DISCLOSURE_FOOTER",
+    "AI_DISCLOSURE_CHAT", "AI_DISCLOSURE_CHECK",
 )
 _PALETTE_KEYS = ("BLUE", "BLUE_LIGHT", "BLUE_DEEP", "BG", "CARD", "FG", "MUTED")
 
@@ -58,6 +61,16 @@ def test_profile_contract(channel):
         f"{channel}: DISCLAIMER_CHECK kommt nicht im REEL_DISCLAIMER vor"
     assert check in prof.FEED_DISCLAIMER.lower(), \
         f"{channel}: DISCLAIMER_CHECK kommt nicht im FEED_DISCLAIMER vor"
+
+    # dasselbe Sicherheitsnetz für den KI-Hinweis (EU KI-VO Art. 50): passt der
+    # Prüf-Substring nicht zum Hinweistext, hängt der Code ihn bei JEDER Caption
+    # erneut an — der Fehler fällt sonst erst im veröffentlichten Post auf.
+    ai_check = prof.AI_DISCLOSURE_CHECK
+    assert ai_check == ai_check.lower(), f"{channel}: AI_DISCLOSURE_CHECK muss lowercase sein"
+    assert ai_check in prof.AI_DISCLOSURE_CAPTION.lower(), \
+        f"{channel}: AI_DISCLOSURE_CHECK kommt nicht in AI_DISCLOSURE_CAPTION vor"
+    assert ai_check in prof.AI_DISCLOSURE_TEXT.lower(), \
+        f"{channel}: AI_DISCLOSURE_CHECK kommt nicht in AI_DISCLOSURE_TEXT vor"
 
     # compliance regex must compile
     re.compile(prof.ADVICE_PATTERN, re.IGNORECASE)

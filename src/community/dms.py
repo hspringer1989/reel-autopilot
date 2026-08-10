@@ -82,8 +82,17 @@ async def _ingest(api: CommunityAPI) -> list[int]:
     return new_ids
 
 
-async def _send(row_id: int, api: CommunityAPI, text: str) -> bool:
-    """Send a DM reply and mark the row. False on API error."""
+async def _send(row_id: int, api: CommunityAPI, text: str,
+                ai_generated: bool = True) -> bool:
+    """Send a DM reply and mark the row. False on API error.
+
+    Automated replies carry the AI disclosure required by EU KI-VO Art. 50 Abs. 1;
+    `ai_generated=False` is for text a human typed in the Telegram edit flow.
+    """
+    if ai_generated:
+        from src.community.comments import mark_ai_reply
+
+        text = mark_ai_reply(text)
     with session_scope() as session:
         row = session.get(DmMessageRow, row_id)
         thread = session.get(DmThreadRow, row.thread_id)
@@ -242,5 +251,5 @@ async def resolve_edit(tg_message_id: str, custom_text: str) -> str | None:
         if row.status not in ("escalated", "pending_review"):
             return f"DM #{row.id} ist bereits '{row.status}'"
         row_id = row.id
-    ok = await _send(row_id, get_api(), custom_text)
+    ok = await _send(row_id, get_api(), custom_text, ai_generated=False)
     return "✅ Deine DM wurde gesendet" if ok else "⚠️ DM konnte nicht gesendet werden"

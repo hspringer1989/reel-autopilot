@@ -96,6 +96,11 @@ def build_feed_post(topic_slug: str, title: str, brief: str, llm: LLMProvider,
     if config.PROFILE.DISCLAIMER_CHECK not in caption.lower():
         caption = f"{caption}\n\n⚠️ {_DISCLAIMER}".strip()
 
+    # EU KI-VO Art. 50 Abs. 4 UAbs. 2 — KI-erzeugte Texte zu Themen von öffentlichem
+    # Interesse. Feed-Beiträge haben keine Stimme, deshalb die Text-Variante.
+    if config.PROFILE.AI_DISCLOSURE_CHECK not in caption.lower():
+        caption = f"{caption}\n\n{config.PROFILE.AI_DISCLOSURE_TEXT}".strip()
+
     hashtags = [
         h if h.startswith("#") else f"#{h}"
         for h in (str(x).strip() for x in data.get("hashtags", []))

@@ -286,6 +286,21 @@ scheduler tick (every COMMUNITY_POLL_MINUTES)
 
 ## Compliance (do not weaken)
 
+- **KI-Kennzeichnung (EU KI-VO Art. 50, verbindlich seit 02.08.2026).** Drei der vier
+  Pflichtenkreise treffen uns; Bußgeldrahmen bis 15 Mio. € bzw. 3 % des Weltumsatzes:
+  | Pflicht | Was bei uns | Umsetzung |
+  |---|---|---|
+  | Abs. 1 — Interaktion mit KI | Auto-Antworten auf Kommentare + DMs | `mark_ai_reply()` setzt `AI_DISCLOSURE_CHAT` **als erste Zeile** |
+  | Abs. 4 UAbs. 1 — Deepfake/Audio | synthetische Sprecherstimme im Reel | `AI_DISCLOSURE_CAPTION` in der Caption + `AI_DISCLOSURE_FOOTER` im Bild |
+  | Abs. 4 UAbs. 2 — KI-Text, öffentl. Interesse | Skripte, Analysen, Feed-Texte | `AI_DISCLOSURE_TEXT`; die Telegram-Freigabe erfüllt zusätzlich die Ausnahme „menschliche Prüfung" |
+
+  Abs. 2 (maschinenlesbare Markierung) trifft die **Anbieter** der KI-Systeme
+  (ElevenLabs, Anthropic), nicht uns als Betreiber.
+  Alle Texte kommen aus dem Profil (kanalneutral); `AI_DISCLOSURE_CHECK` ist das
+  Sicherheitsnetz analog zu `DISCLAIMER_CHECK`. Nur von Menschen getippte Antworten
+  (Telegram-Edit-Flow) bleiben ungemarkt — das ist keine KI-Interaktion.
+  **Manuell gebaute Reels müssen den Hinweis selbst mitbringen** (Caption + Fußzeile
+  im Frame); die Engine kann dort nichts nachrüsten.
 - Scripts must stay educational/news-driven — no buy/sell recommendations for
   specific securities (BaFin finfluencer rules). The disclaimer append in
   `script_agent.py` is a safety net, not decoration.

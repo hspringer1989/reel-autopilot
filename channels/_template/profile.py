@@ -42,6 +42,20 @@ MILESTONE_FOOTER = "TODO(<channel>): z. B. 'Danke fürs Dabeisein'"
 # Disclaimer automatisch an. Muss im REEL_DISCLAIMER/FEED_DISCLAIMER vorkommen!
 DISCLAIMER_CHECK = "TODO(<channel>): z. B. 'bildung'"
 
+# ── KI-Transparenz (EU KI-VO Art. 50, verbindlich seit 02.08.2026) ─────────
+# PFLICHT, nicht optional — die Vorgaben gelten unabhängig von Plattformregeln.
+# Betroffen sind: automatische Antworten an Nutzer (Abs. 1), KI-erzeugte Audio-/
+# Video-Inhalte wie synthetische Sprecherstimmen (Abs. 4 UAbs. 1) und KI-Texte zu
+# Themen von öffentlichem Interesse (Abs. 4 UAbs. 2).
+# Wer die Engine ohne synthetische Stimme nutzt, formuliert AI_DISCLOSURE_CAPTION
+# entsprechend um — weglassen sollte man den Hinweis nicht.
+AI_DISCLOSURE_CAPTION = "TODO(<channel>): z. B. '🤖 KI-Hinweis: Stimme und Texte wurden mit KI erstellt.'"
+AI_DISCLOSURE_TEXT = "TODO(<channel>): z. B. '🤖 KI-Hinweis: Die Texte wurden mit KI erstellt.'"
+AI_DISCLOSURE_FOOTER = "TODO(<channel>): z. B. 'KI-generiert'"
+AI_DISCLOSURE_CHAT = "TODO(<channel>): z. B. '🤖 Automatische Antwort (KI)'"
+# Lowercase-Substring des KI-Hinweises — Sicherheitsnetz analog zu DISCLAIMER_CHECK.
+AI_DISCLOSURE_CHECK = "TODO(<channel>): z. B. 'ki-hinweis'"
+
 # ── Wortmarke / visuelle Identität ─────────────────────────────────────────
 WORDMARK = "TODO(<channel>): z. B. 'TECH KANAL'"       # Brandmark auf hellen Story-Cards
 PHOTO_WORDMARK = ("TODO", "TODO")                       # zwei Banner-Wörter auf Foto-Covern

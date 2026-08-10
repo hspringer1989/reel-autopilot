@@ -81,6 +81,12 @@ def generate_script(trend: TrendItem, llm: LLMProvider,
     if config.PROFILE.DISCLAIMER_CHECK not in caption.lower():
         caption = f"{caption}\n\n{_DISCLAIMER}".strip()
 
+    # EU KI-VO Art. 50 Abs. 4: Reels tragen eine synthetische Sprecherstimme und
+    # KI-geschriebenen Text — beides ist offenzulegen. Wie beim Disclaimer oben ist
+    # das ein Sicherheitsnetz und keine Kosmetik: fehlt der Hinweis, wird er angehängt.
+    if config.PROFILE.AI_DISCLOSURE_CHECK not in caption.lower():
+        caption = f"{caption}\n\n{config.PROFILE.AI_DISCLOSURE_CAPTION}".strip()
+
     hashtags = [
         h if h.startswith("#") else f"#{h}"
         for h in (str(x).strip() for x in data.get("hashtags", []))

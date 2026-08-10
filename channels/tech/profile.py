@@ -39,6 +39,23 @@ MILESTONE_FOOTER = "Nur Bildung & Einordnung · Danke fürs Dabeisein"
 # Disclaimer als Sicherheitsnetz an (script_agent.py / feedposts/generator.py).
 DISCLAIMER_CHECK = "einordnung"
 
+# ── KI-Transparenz (EU KI-VO Art. 50, verbindlich seit 02.08.2026) ─────────
+# Von der Engine ZWINGEND erwartet — ohne diese Keys bricht die Caption-Erzeugung ab.
+# Die Formulierungen sind ein tragfähiger Startwert; @WPSteffen1993 darf sie jederzeit
+# an den eigenen Ton anpassen, solange der Hinweis erhalten bleibt und
+# AI_DISCLOSURE_CHECK weiterhin in CAPTION und TEXT vorkommt.
+AI_DISCLOSURE_CAPTION = (
+    "🤖 KI-Hinweis: Sprecherstimme und Texte dieses Beitrags wurden mit KI erstellt, "
+    "Auswahl und Freigabe erfolgen redaktionell durch einen Menschen."
+)
+AI_DISCLOSURE_TEXT = (
+    "🤖 KI-Hinweis: Die Texte dieses Beitrags wurden mit KI erstellt, Auswahl und "
+    "Freigabe erfolgen redaktionell durch einen Menschen."
+)
+AI_DISCLOSURE_FOOTER = "KI-generiert"
+AI_DISCLOSURE_CHAT = "🤖 Automatische Antwort (KI)"
+AI_DISCLOSURE_CHECK = "ki-hinweis"
+
 # ── Wortmarke / visuelle Identität ─────────────────────────────────────────
 WORDMARK = "TECH KOMPAKT"                  # Brandmark auf hellen Story-Cards
 PHOTO_WORDMARK = ("TECH", "KOMPAKT")       # zwei Banner-Wörter auf Foto-Covern
