@@ -530,6 +530,26 @@ async def _run_loop() -> None:
 
                 await send_editorial_reminder()
 
+            # 5c) evening reel automation: look back at the last reel, then draft
+            #     tomorrow's and put it in the Telegram review queue. Catch-up window
+            #     because an exact-minute match is lost whenever a tick straddles it.
+            if (config.REEL_AUTOGEN_TIME
+                    and config.REEL_AUTOGEN_TIME <= hhmm < config.REEL_AUTOGEN_CATCHUP_UNTIL
+                    and (slot_key[0], "autogen") not in done_slots):
+                done_slots.add((slot_key[0], "autogen"))
+                from src.content.reel_feedback import analyse_last_reel
+
+                feedback = await analyse_last_reel()
+                if review_configured():
+                    await send_text(feedback.text)
+                new_id = await generate_once(
+                    target_seconds=feedback.target_seconds,
+                    max_age_hours=config.REEL_AUTOGEN_MAX_TREND_AGE_H,
+                )
+                if new_id is None and review_configured():
+                    await send_text("⚠️ Abend-Automatik: kein Reel erzeugt "
+                                    "(kein Trend über der Score-Schwelle).")
+
             # 6) daily insights
             if now.strftime("%H:%M") == _INSIGHTS_SLOT and (slot_key[0], "insights") not in done_slots:
                 done_slots.add((slot_key[0], "insights"))
