@@ -316,3 +316,53 @@ ENABLE_DIVIDEND = True
 # Website-Archiv + wöchentliche Hinweis-Story (ENABLE_SITE / ENABLE_BIO_HINT).
 ENABLE_SITE = True
 ENABLE_BIO_HINT = True
+
+# ── Earnings-Universum (nur für die "Quartalszahlen heute"-Story) ──────────
+# Bewusst viel breiter als STOCK_UNIVERSE: Die Karte braucht nur ein Datum je Titel,
+# und die Termine liegen im Cache (Neuabfrage je Ticker nur alle paar Tage). Die
+# teure Kandidatenanalyse laeuft weiterhin auf dem kuratierten STOCK_UNIVERSE.
+# Alle Kuerzel am 17.08.2026 gegen yfinance geprueft.
+EARNINGS_UNIVERSE = [
+    # USA (224 Titel): S&P-100-Kern plus die groessten Tech-, Finanz-,
+    # Gesundheits- und Industriewerte.
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "GOOG", "META", "TSLA", "BRK-B", "JPM", "V", "MA",
+    "JNJ", "WMT", "PG", "HD", "XOM", "CVX", "KO", "PEP", "ABBV", "MRK", "PFE", "LLY", "BAC",
+    "WFC", "GS", "MS", "C", "AXP", "DIS", "NFLX", "ADBE", "CRM", "ORCL", "CSCO", "INTC", "AMD",
+    "QCOM", "TXN", "AVGO", "IBM", "GE", "CAT", "BA", "HON", "UNH", "CVS", "T", "VZ", "CMCSA",
+    "NKE", "MCD", "SBUX", "COST", "TGT", "LOW", "MMM", "CL", "ADP", "MDT", "EMR", "DE", "LMT",
+    "RTX", "NOC", "GD", "UPS", "FDX", "UNP", "CSX", "NSC", "SO", "DUK", "NEE", "AEP", "D",
+    "EXC", "SRE", "PLD", "AMT", "CCI", "EQIX", "SPG", "O", "PSA", "WELL", "DLR", "SCHW", "BLK",
+    "BX", "KKR", "APO", "SPGI", "MCO", "ICE", "CME", "COF", "USB", "PNC", "TFC", "STT", "AIG",
+    "MET", "PRU", "ALL", "TRV", "PGR", "CB", "AON", "ABT", "TMO", "DHR", "BMY", "AMGN", "GILD",
+    "BIIB", "VRTX", "REGN", "MRNA", "ISRG", "SYK", "BSX", "BDX", "ZTS", "ELV", "CI", "HCA",
+    "MCK", "ADI", "MU", "LRCX", "AMAT", "KLAC", "SNPS", "CDNS", "NXPI", "ON", "MRVL", "PANW",
+    "CRWD", "NOW", "SNOW", "DDOG", "ZS", "NET", "SHOP", "UBER", "ABNB", "DASH", "LYFT", "PYPL",
+    "COIN", "HOOD", "SOFI", "PLTR", "SPOT", "RBLX", "U", "PINS", "SNAP", "ROKU", "F", "GM",
+    "RIVN", "LCID", "LUV", "DAL", "UAL", "AAL", "MAR", "HLT", "BKNG", "EXPE", "CCL", "RCL",
+    "NCLH", "PM", "MO", "STZ", "KHC", "GIS", "HSY", "KMB", "CHD", "SYY", "KR", "DG", "DLTR",
+    "ROST", "TJX", "ORLY", "AZO", "YUM", "CMG", "DPZ", "WDAY", "TEAM", "MDB", "OKTA", "TWLO",
+    "DOCU", "ZM", "ETSY", "EBAY", "COP", "SLB", "HAL", "OXY", "PSX", "VLO", "MPC", "KMI", "WMB",
+    "OKE", "LIN", "APD", "SHW", "ECL", "NEM", "FCX", "NUE", "DOW", "DD",
+    # Europa (171 Titel): DAX und MDAX, dazu die Schwergewichte aus
+    # NL, FR, CH, IT, ES, UK, DK, SE, FI und BE.
+    "ADS.DE", "AIR.DE", "ALV.DE", "BAS.DE", "BAYN.DE", "BEI.DE", "BMW.DE", "BNR.DE", "CBK.DE",
+    "CON.DE", "1COV.DE", "DTG.DE", "DBK.DE", "DB1.DE", "DHL.DE", "DTE.DE", "EOAN.DE", "FRE.DE",
+    "HNR1.DE", "HEI.DE", "HEN3.DE", "IFX.DE", "MBG.DE", "MRK.DE", "MTX.DE", "MUV2.DE",
+    "PAH3.DE", "P911.DE", "QIA.DE", "RHM.DE", "RWE.DE", "SAP.DE", "SRT3.DE", "SIE.DE", "ENR.DE",
+    "SHL.DE", "SY1.DE", "VOW3.DE", "VNA.DE", "ZAL.DE", "G1A.DE", "HYQ.DE", "PAT.DE", "LHA.DE",
+    "TKA.DE", "EVK.DE", "FRA.DE", "HLAG.DE", "SDF.DE", "LEG.DE", "PUM.DE", "S92.DE", "SIX2.DE",
+    "TLX.DE", "WCH.DE", "AFX.DE", "AIXA.DE", "BC8.DE", "DUE.DE", "GXI.DE", "JUN3.DE", "KGX.DE",
+    "KRN.DE", "NEM.DE", "PBB.DE", "RRTL.DE", "SZG.DE", "TEG.DE", "WAF.DE", "NDA.DE", "EVD.DE",
+    "COK.DE", "ASML.AS", "HEIA.AS", "PRX.AS", "INGA.AS", "PHIA.AS", "AD.AS", "WKL.AS",
+    "DSFIR.AS", "KPN.AS", "ABN.AS", "MC.PA", "OR.PA", "RMS.PA", "AI.PA", "SU.PA", "TTE.PA",
+    "SAN.PA", "BNP.PA", "ACA.PA", "GLE.PA", "DG.PA", "CAP.PA", "KER.PA", "EL.PA", "SGO.PA",
+    "VIE.PA", "ORA.PA", "ENGI.PA", "STLAP.PA", "RNO.PA", "ML.PA", "PUB.PA", "SAF.PA", "HO.PA",
+    "LR.PA", "NESN.SW", "NOVN.SW", "UBSG.SW", "ZURN.SW", "ABBN.SW", "CFR.SW", "LONN.SW",
+    "SIKA.SW", "GIVN.SW", "SREN.SW", "ISP.MI", "ENI.MI", "ENEL.MI", "UCG.MI", "STLAM.MI",
+    "G.MI", "RACE.MI", "TIT.MI", "PST.MI", "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "REP.MC",
+    "TEF.MC", "AENA.MC", "SHEL.L", "AZN.L", "HSBA.L", "ULVR.L", "BP.L", "GSK.L", "RIO.L",
+    "BATS.L", "DGE.L", "LSEG.L", "REL.L", "NG.L", "VOD.L", "BARC.L", "LLOY.L", "TSCO.L",
+    "GLEN.L", "AAL.L", "PRU.L", "IMB.L", "NOVO-B.CO", "MAERSK-B.CO", "ORSTED.CO", "VWS.CO",
+    "DSV.CO", "VOLV-B.ST", "ATCO-A.ST", "ERIC-B.ST", "SAND.ST", "HM-B.ST", "INVE-B.ST",
+    "ESSITY-B.ST", "NOKIA.HE", "SAMPO.HE", "NESTE.HE", "ABI.BR", "KBC.BR", "UCB.BR",
+]

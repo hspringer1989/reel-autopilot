@@ -84,6 +84,7 @@ class EarningsItem:
     name: str
     market: str = "US"       # US | EU (drives the posting time zone)
     when: str = ""           # "vorbörslich" | "nachbörslich" | ""
+    cap: float = 0.0         # market cap, only used to rank the card by prominence
 
 
 @dataclass

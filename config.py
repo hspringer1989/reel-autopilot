@@ -149,7 +149,9 @@ BRAND_AVATAR = _get("BRAND_AVATAR", str(CHANNEL_DIR / "assets" / "templates" / "
 # ── Stocks / daily story pipeline ─────────────────────────────────────────
 # yfinance | fake  (fake = offline testing without network)
 STOCK_DATA_PROVIDER = _get("STOCK_DATA_PROVIDER", "yfinance")
-# Ticker universe scanned for both the earnings card and the watchlist candidates.
+# Ticker universe for the watchlist CANDIDATES (chart + fundamentals + one LLM call
+# per pick, so every extra ticker costs real time and money — keep it curated).
+# The earnings card uses STOCK_EARNINGS_UNIVERSE below, which may be much larger.
 # Mix US + EU (EU tickers carry an exchange suffix, e.g. SAP.DE).
 STOCK_UNIVERSE = _get_list(
     "STOCK_UNIVERSE",
@@ -165,6 +167,23 @@ STOCK_UNIVERSE = _get_list(
     "RMS.PA,AI.PA,SU.PA,TTE.PA,SAN.PA,BNP.PA,NESN.SW,NOVN.SW,ROG.SW,UBSG.SW,"
     "ISP.MI,ENI.MI,ENEL.MI,SHEL.L,AZN.L,HSBA.L,ULVR.L,BP.L",
 )
+# Separate, much larger universe for the "Quartalszahlen heute" card. Scanning it is
+# cheap because the dates are cached (one lookup per ticker per STOCK_EARNINGS_REFRESH_DAYS),
+# while the candidate scan above stays on the curated STOCK_UNIVERSE.
+_earnings_extra = _get_list(
+    "STOCK_EARNINGS_UNIVERSE", ",".join(getattr(PROFILE, "EARNINGS_UNIVERSE", []))
+)
+# Union with the candidate universe, so widening the card can never DROP a ticker that
+# was covered before. An empty profile list therefore reproduces the old behaviour exactly.
+STOCK_EARNINGS_UNIVERSE = list(dict.fromkeys(STOCK_UNIVERSE + _earnings_extra))
+# How many companies the card shows at most, ranked by market cap. With a wide universe
+# many days have a long tail of names nobody recognises; showing all of them would be
+# worse than showing none.
+STOCK_EARNINGS_MAX = int(_get("STOCK_EARNINGS_MAX", "6"))
+# A company's next reporting date does not move day to day — re-check each ticker only
+# this often. A cached date that has already passed is refreshed regardless.
+STOCK_EARNINGS_REFRESH_DAYS = int(_get("STOCK_EARNINGS_REFRESH_DAYS", "7"))
+
 STOCK_CANDIDATES_COUNT = int(_get("STOCK_CANDIDATES_COUNT", "4"))
 # A ticker analysed as a candidate is not picked again for this many days.
 STOCK_REPEAT_COOLDOWN_DAYS = int(_get("STOCK_REPEAT_COOLDOWN_DAYS", "30"))

@@ -179,3 +179,8 @@ ENABLE_DIVIDEND = False
 # SITE_*-Angaben oben ausgefüllt sind (sonst steht dort TODO im Impressum).
 ENABLE_SITE = False
 ENABLE_BIO_HINT = False
+
+# ── Earnings-Universum (optional, nur mit ENABLE_STOCKS) ───────────────────
+# Breite Ticker-Liste NUR fuer die "Quartalszahlen heute"-Story. Leer lassen, dann
+# faellt die Engine auf STOCK_UNIVERSE zurueck und verhaelt sich wie bisher.
+EARNINGS_UNIVERSE: list[str] = []

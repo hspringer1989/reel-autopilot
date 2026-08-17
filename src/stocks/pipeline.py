@@ -84,7 +84,15 @@ def build_daily_stories(
     # 1) Earnings-of-the-day card — only when companies actually report today. On
     #    weekends / holidays (and quiet weekdays) the calendar is empty, so we skip the
     #    "Quartalszahlen heute" story entirely instead of posting an empty one.
-    earnings = get_earnings_calendar().todays(config.STOCK_UNIVERSE, config.TIMEZONE)
+    #    Scanned over the WIDE earnings universe (cached dates), then cut to the most
+    #    prominent names: a card full of unknown small caps is worse than no card.
+    earnings = get_earnings_calendar().todays(
+        config.STOCK_EARNINGS_UNIVERSE, config.TIMEZONE
+    )
+    if len(earnings) > config.STOCK_EARNINGS_MAX:
+        logger.info(f"Earnings: {len(earnings)} Termine → auf die "
+                    f"{config.STOCK_EARNINGS_MAX} größten gekürzt")
+        earnings = earnings[: config.STOCK_EARNINGS_MAX]
     if earnings:
         e_path = render_earnings_card(earnings, str(out_dir / f"earnings_{_stamp()}.jpg"), day_label)
         e_caption = f"📅 Quartalszahlen heute ({day_label})\n\n{_DISCLAIMER}"

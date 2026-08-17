@@ -4,8 +4,10 @@ without network (STOCK_DATA_PROVIDER=fake). yfinance is imported lazily inside t
 methods so tests never need it installed."""
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from datetime import date, datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from loguru import logger
@@ -160,30 +162,100 @@ class YFinanceMarketData(MarketData):
 
 
 class YFinanceEarningsCalendar(EarningsCalendar):
-    """Scans the configured universe and keeps tickers whose next earnings date is
-    today (exchange-local). One yfinance call per ticker — modest universe, once/day."""
+    """Next-earnings dates come from a local cache, so a wide universe does not mean one
+    yfinance call per ticker every morning. A company's reporting date does not move from
+    day to day: an entry is refetched only when it is missing, older than
+    STOCK_EARNINGS_REFRESH_DAYS, or when its cached date already lies in the past.
+
+    Only the handful of tickers actually reporting today trigger a second call (name +
+    market cap), which is what the card is ranked by."""
+
+    CACHE_NAME = "earnings_calendar.json"
+
+    def _cache_path(self):
+        return Path(config.DATA_DIR) / self.CACHE_NAME
+
+    def _load(self) -> dict:
+        path = self._cache_path()
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Earnings-Cache unlesbar ({exc}) — wird neu aufgebaut")
+            return {}
+
+    def _save(self, cache: dict) -> None:
+        path = self._cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)  # atomar, damit ein Abbruch keinen halben Cache hinterlässt
+
+    @staticmethod
+    def _stale(entry: dict, today: date, max_age_days: int) -> bool:
+        checked = entry.get("checked")
+        if not checked:
+            return True
+        try:
+            checked_on = date.fromisoformat(checked)
+        except ValueError:
+            return True
+        if checked_on >= today:
+            return False  # heute schon nachgesehen, nicht mehrfach abfragen
+        if (today - checked_on).days >= max_age_days:
+            return True
+        cached = entry.get("date")
+        if not cached:
+            return False
+        try:
+            # yfinance liefert bei manchen Titeln den ZULETZT gemeldeten Termin statt des
+            # naechsten. Ein Datum in der Vergangenheit heisst also "naechster Termin
+            # unbekannt" und wird taeglich einmal nachgefragt, bis ein neuer erscheint.
+            return date.fromisoformat(cached) < today
+        except ValueError:
+            return True
 
     def todays(self, universe: list[str], tz: str) -> list[EarningsItem]:
         import yfinance as yf
 
         today = datetime.now(ZoneInfo(tz)).date()
-        items: list[EarningsItem] = []
+        cache = self._load()
+        max_age = config.STOCK_EARNINGS_REFRESH_DAYS
+        refreshed = 0
+
         for ticker in universe:
+            entry = cache.get(ticker) or {}
+            if not self._stale(entry, today, max_age):
+                continue
+            refreshed += 1
             try:
-                cal = yf.Ticker(ticker).calendar
-                edate = _extract_earnings_date(cal)
+                edate = _extract_earnings_date(yf.Ticker(ticker).calendar)
             except Exception as exc:  # noqa: BLE001
                 logger.debug(f"Earnings-Datum für {ticker} nicht abrufbar: {exc}")
+                edate = None
+            cache[ticker] = {"date": edate.isoformat() if edate else None,
+                             "checked": today.isoformat()}
+        if refreshed:
+            self._save(cache)
+
+        items: list[EarningsItem] = []
+        for ticker in universe:
+            if (cache.get(ticker) or {}).get("date") != today.isoformat():
                 continue
-            if edate == today:
-                info = None
-                try:
-                    info = yf.Ticker(ticker).info
-                except Exception:  # noqa: BLE001
-                    pass
-                name = (info or {}).get("shortName") or ticker
-                items.append(EarningsItem(ticker, name, _market_for(ticker)))
-        logger.info(f"Earnings heute ({today}): {len(items)} von {len(universe)} Titeln")
+            info = {}
+            try:
+                info = yf.Ticker(ticker).info or {}
+            except Exception:  # noqa: BLE001
+                pass
+            items.append(EarningsItem(
+                ticker, info.get("shortName") or ticker, _market_for(ticker),
+                cap=float(info.get("marketCap") or 0.0),
+            ))
+        items.sort(key=lambda e: e.cap, reverse=True)
+        logger.info(f"Earnings heute ({today}): {len(items)} von {len(universe)} Titeln "
+                    f"({refreshed} Termine neu geholt)")
         return items
 
 
