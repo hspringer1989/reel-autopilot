@@ -133,6 +133,10 @@ def _card_html(it: dict) -> str:
 
 def _shell(inner: str, title: str, desc: str, home: bool) -> str:
     og_image = _P.SITE_URL.rstrip("/") + "/logo.png"
+    # Rechtsseiten können extern liegen (z. B. zentral beim Betreiber-Gewerbe);
+    # ohne Profil-Key bleiben es die lokal mitkopierten Seiten.
+    privacy_url = getattr(_P, "SITE_PRIVACY_URL", "") or "/datenschutz"
+    terms_url = getattr(_P, "SITE_TERMS_URL", "") or "/nutzungsbedingungen"
     top = "" if home else (
         '<header class="bar"><a class="bar-logo" href="/">'
         f'<img src="logo.png" width="34" height="34" alt="{_esc(_P.SITE_BRAND)}">'
@@ -217,7 +221,7 @@ def _shell(inner: str, title: str, desc: str, home: bool) -> str:
 {inner}
 <footer>
   <p>{_P.SITE_FOOTER_DISCLAIMER}</p>
-  <p><a href="/datenschutz">Datenschutz</a> · <a href="/nutzungsbedingungen">Nutzungsbedingungen</a> · <a href="/impressum">Impressum</a> · <a href="{_P.SITE_IG_URL}">Instagram</a></p>
+  <p><a href="{privacy_url}">Datenschutz</a> · <a href="{terms_url}">Nutzungsbedingungen</a> · <a href="/impressum">Impressum</a> · <a href="{_P.SITE_IG_URL}">Instagram</a></p>
   <p>© {_year()} {_esc(_P.SITE_BRAND)}</p>
 </footer>
 </body>
@@ -293,12 +297,26 @@ def _render_impressum() -> str:
     name = _esc(_P.SITE_IMPRESSUM_NAME)
     address = "<br>".join(_esc(line) for line in _P.SITE_IMPRESSUM_ADDRESS)
     mail = _esc(_P.SITE_IMPRESSUM_EMAIL)
+    # Optionale Angaben für gewerbliche Betreiber: Inhaber (Einzelunternehmen mit
+    # Geschäftsbezeichnung), Telefon, USt-IdNr. und ein vom Betreibernamen
+    # abweichender MStV-Verantwortlicher (muss eine natürliche Person sein).
+    owner = _esc(getattr(_P, "SITE_IMPRESSUM_OWNER", ""))
+    phone = _esc(getattr(_P, "SITE_IMPRESSUM_PHONE", ""))
+    vat = _esc(getattr(_P, "SITE_IMPRESSUM_VAT", ""))
+    responsible = _esc(getattr(_P, "SITE_IMPRESSUM_RESPONSIBLE", "")) or owner or name
+
+    holder = f"{name}<br>Inhaber: {owner}" if owner else name
+    contact = f'E-Mail: <a href="mailto:{mail}">{mail}</a>'
+    if phone:
+        contact += f"<br>Telefon: {phone}"
+    vat_html = (f'\n    <p><b>USt-IdNr. gemäß § 27a UStG:</b><br>{vat}</p>'
+                if vat else "")
     inner = f"""  <div class="legal">
     <h1>Impressum</h1>
     <p>Angaben gemäß § 5 DDG / § 18 Abs. 2 MStV:</p>
-    <p>{name}<br>{address}</p>
-    <p><b>Kontakt:</b><br>E-Mail: <a href="mailto:{mail}">{mail}</a></p>
-    <p><b>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV:</b><br>{name} (Anschrift wie oben)</p>
+    <p>{holder}<br>{address}</p>
+    <p><b>Kontakt:</b><br>{contact}</p>{vat_html}
+    <p><b>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV:</b><br>{responsible} (Anschrift wie oben)</p>
     <p style="color:#667085;font-size:.9rem">{_esc(_P.SITE_IMPRESSUM_NOTE)}</p>
     <p><a href="/">&larr; Zurück zu den Analysen</a></p>
   </div>"""
@@ -330,7 +348,14 @@ def build_site() -> int:
 
     (site / "index.html").write_text(_render_index(items), encoding="utf-8")
     (site / "impressum.html").write_text(_render_impressum(), encoding="utf-8")
-    for name in ("datenschutz.html", "nutzungsbedingungen.html", "datenloeschung.html"):
+    # Extern verlinkte Rechtsseiten (SITE_PRIVACY_URL/SITE_TERMS_URL) werden nicht
+    # mehr lokal mitkopiert; die Datenlöschungs-Seite bleibt immer lokal (Meta-URL).
+    legal_pages = ["datenloeschung.html"]
+    if not getattr(_P, "SITE_PRIVACY_URL", ""):
+        legal_pages.append("datenschutz.html")
+    if not getattr(_P, "SITE_TERMS_URL", ""):
+        legal_pages.append("nutzungsbedingungen.html")
+    for name in legal_pages:
         src = Path(config.PUBLIC_MEDIA_DIR) / name
         if src.exists():
             try:
