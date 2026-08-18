@@ -43,6 +43,27 @@ def test_impressum_comes_from_the_profile():
         assert line in html
 
 
+def test_impressum_optional_business_fields_render_when_set():
+    """Owner/phone/VAT/MStV-responsible are optional keys — if the profile sets them,
+    they must land in the imprint; without them the page must still render."""
+    html = generator._render_impressum()
+    for key in ("SITE_IMPRESSUM_OWNER", "SITE_IMPRESSUM_PHONE", "SITE_IMPRESSUM_VAT",
+                "SITE_IMPRESSUM_RESPONSIBLE"):
+        value = getattr(_P, key, "")
+        if value:
+            assert value in html, f"{key} fehlt im gerenderten Impressum"
+
+
+def test_footer_legal_links_prefer_profile_urls():
+    """External privacy/terms URLs (SITE_PRIVACY_URL/SITE_TERMS_URL) replace the
+    local /datenschutz and /nutzungsbedingungen links in the footer."""
+    html = generator._render_index([])
+    privacy = getattr(_P, "SITE_PRIVACY_URL", "") or "/datenschutz"
+    terms = getattr(_P, "SITE_TERMS_URL", "") or "/nutzungsbedingungen"
+    assert f'href="{privacy}"' in html
+    assert f'href="{terms}"' in html
+
+
 def test_collect_only_takes_published_cards_from_the_cutoff_on():
     published = _make_story()
     _make_story(status="pending_review")                      # not public yet

@@ -235,6 +235,8 @@ StoryRow(kind in candidate|trend, published, trade_date >= PROFILE.SITE_MIN_DATE
   _render_impressum()                                      → index.html, impressum.html
         ▼  card JPGs copied to SITE_DIR/cards/, logo from channels/<ch>/assets/brand/
   nginx serves the domain;  datenschutz/nutzungsbedingungen are copied from PUBLIC_MEDIA_DIR
+  unless the profile sets SITE_PRIVACY_URL/SITE_TERMS_URL (external legal pages, e.g. the
+  operator's business site) — then the footer links there and no local copy is made
 ```
 
 **Channel-neutral by contract**: brand, domain, handle, hero copy, footer and the full

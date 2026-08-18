@@ -166,6 +166,14 @@ SITE_IMPRESSUM_NAME = "TODO(<channel>)"
 SITE_IMPRESSUM_ADDRESS = ("TODO: Straße Nr.", "TODO: PLZ Ort, Land")
 SITE_IMPRESSUM_EMAIL = "todo@example.invalid"
 SITE_IMPRESSUM_NOTE = "TODO: ein Satz, was das Angebot ist und was es nicht ist."
+# Optional für gewerbliche Betreiber (weglassen = erscheint nicht im Impressum):
+# SITE_IMPRESSUM_OWNER = "Vorname Nachname"     # Inhaber bei Einzelunternehmen
+# SITE_IMPRESSUM_PHONE = "0170 0000000"
+# SITE_IMPRESSUM_VAT = "DE000000000"            # USt-IdNr. nach § 27a UStG
+# SITE_IMPRESSUM_RESPONSIBLE = "Vorname Nachname"  # § 18 Abs. 2 MStV, falls abweichend
+# Optional: Rechtsseiten extern hosten statt lokal aus PUBLIC_MEDIA_DIR zu kopieren.
+# SITE_PRIVACY_URL = "https://example.invalid/datenschutz.html"
+# SITE_TERMS_URL = "https://example.invalid/nutzungsbedingungen.html"
 
 # Wöchentliche Website-Hinweis-Story (src/bio_hint.py): fertige Vorlage in
 # channels/<kanal>/assets/templates/, wird unverändert gepostet.

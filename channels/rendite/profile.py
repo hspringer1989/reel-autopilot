@@ -298,12 +298,21 @@ SITE_SEARCH_HINT = "🔎 Aktie suchen (z. B. Nvidia, SAP) …"
 # Ältere Karten nutzen das Vor-Redesign-Layout — erst ab hier ins Archiv aufnehmen.
 SITE_MIN_DATE = "2026-07-24"
 # Impressum (§ 5 DDG / § 18 Abs. 2 MStV) — Pflichtangaben des Betreibers.
-SITE_IMPRESSUM_NAME = "Haiko Springer"
-SITE_IMPRESSUM_ADDRESS = ("Waldenburger Straße 46", "12621 Berlin, Deutschland")
-SITE_IMPRESSUM_EMAIL = "haiko.springer@googlemail.com"
-SITE_IMPRESSUM_NOTE = ("Renditeradar ist ein privates, redaktionelles Informations- und "
-                       "Bildungsangebot rund um Finanzthemen. Die Inhalte stellen keine "
-                       "Anlageberatung dar.")
+# Betreiber seit 17.08.2026: Jumpers Media (Einzelunternehmen), identisch mit dem
+# Impressum auf jumpersmedia.de — Angaben müssen für Meta Verified zeichengenau
+# mit der Gewerbeanmeldung und dem Meta Business Portfolio übereinstimmen.
+SITE_IMPRESSUM_NAME = "Jumpers Media"
+SITE_IMPRESSUM_OWNER = "Steffen Springer"
+SITE_IMPRESSUM_ADDRESS = ("Blumenstraße 37", "85586 Poing, Deutschland")
+SITE_IMPRESSUM_EMAIL = "springer.steffen93@gmail.com"
+SITE_IMPRESSUM_PHONE = "0171 2282485"
+SITE_IMPRESSUM_RESPONSIBLE = "Steffen Springer"
+SITE_IMPRESSUM_NOTE = ("Renditeradar ist ein redaktionelles Informations- und "
+                       "Bildungsangebot rund um Finanzthemen von Jumpers Media. "
+                       "Die Inhalte stellen keine Anlageberatung dar.")
+# Datenschutz + Nutzungsbedingungen liegen zentral beim Betreiber-Gewerbe.
+SITE_PRIVACY_URL = "https://jumpersmedia.de/datenschutz.html"
+SITE_TERMS_URL = "https://jumpersmedia.de/nutzungsbedingungen.html"
 
 # Wöchentliche Website-Hinweis-Story (src/bio_hint.py): fertige Vorlage in
 # channels/<kanal>/assets/templates/, wird unverändert gepostet.
