@@ -15,6 +15,25 @@ class LLMProvider(ABC):
     def complete(self, system: str, user: str, model: str, max_tokens: int, purpose: str) -> str:
         """Return the raw text completion. Raises BudgetExceeded if the daily cap is hit."""
 
+    def research(self, system: str, user: str, model: str, max_tokens: int,
+                 purpose: str, max_searches: int = 6) -> str:
+        """Answer using Anthropic's server-side web search — the only way this host can
+        reach the live web (no outbound scraping, no search API key of our own).
+
+        Default implementation falls back to `complete()`, so a provider without web
+        access (FakeLLM in tests) still returns something usable instead of raising.
+        """
+        return self.complete(system, user, model, max_tokens, purpose)
+
+    def judge_image(self, system: str, user: str, image_jpeg: bytes, model: str,
+                    max_tokens: int, purpose: str) -> str:
+        """Judge an image and return text. Used to pick reel openers by eye instead of
+        by brightness arithmetic — a bright frame can still be the wrong picture.
+
+        Default implementation ignores the image and falls back to `complete()`.
+        """
+        return self.complete(system, user, model, max_tokens, purpose)
+
 
 class BudgetExceeded(RuntimeError):
     pass
@@ -44,6 +63,64 @@ class ClaudeProvider(LLMProvider):
         return message.content[0].text
 
 
+    # Der Client-Timeout (120 s) ist fuer normale Textcalls gedacht. Ein Recherche-Call
+    # fuehrt bis zu sechs Websuchen serverseitig aus, bevor das erste Token kommt, und
+    # reisst die 120 s zuverlaessig — im Livetest am 20.08.2026 dreimal hintereinander
+    # bis zum APITimeoutError. Deshalb hier ein eigenes Zeitbudget.
+    RESEARCH_TIMEOUT_S = 600.0
+
+    def research(self, system: str, user: str, model: str, max_tokens: int,
+                 purpose: str, max_searches: int = 6) -> str:
+        """Server-side web search. Anthropic runs the queries; we get text + citations.
+        Costs more input tokens than a plain call (search results enter the context),
+        so the daily budget gate matters here more than anywhere else.
+
+        Gestreamt, nicht als ein Block angefordert: bei einem Aufruf, der erst sucht und
+        dann eine lange Antwort schreibt, laeuft sonst der Lesevorgang in den Timeout,
+        obwohl der Server noch arbeitet."""
+        if usage.claude_budget_exceeded():
+            raise BudgetExceeded("Claude-Tagesbudget erschöpft")
+        client = self._client.with_options(timeout=self.RESEARCH_TIMEOUT_S)
+        with client.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user}],
+            tools=[{"type": "web_search_20260209", "name": "web_search",
+                    "max_uses": max_searches}],
+        ) as stream:
+            message = stream.get_final_message()
+        usage.record_claude(
+            model, message.usage.input_tokens, message.usage.output_tokens, purpose
+        )
+        # A search turn returns interleaved blocks (server_tool_use, results, text).
+        # Only the text blocks carry the answer; join them in order.
+        return "\n".join(b.text for b in message.content if b.type == "text")
+
+    def judge_image(self, system: str, user: str, image_jpeg: bytes, model: str,
+                    max_tokens: int, purpose: str) -> str:
+        import base64
+
+        if usage.claude_budget_exceeded():
+            raise BudgetExceeded("Claude-Tagesbudget erschöpft")
+        message = self._client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/jpeg",
+                    "data": base64.standard_b64encode(image_jpeg).decode(),
+                }},
+                {"type": "text", "text": user},
+            ]}],
+        )
+        usage.record_claude(
+            model, message.usage.input_tokens, message.usage.output_tokens, purpose
+        )
+        return "\n".join(b.text for b in message.content if b.type == "text")
+
+
 class FakeLLM(LLMProvider):
     """Deterministic canned responses for tests: maps a purpose to a response."""
 
@@ -56,16 +133,62 @@ class FakeLLM(LLMProvider):
         return self.responses[purpose]
 
 
+def _balanced_span(text: str) -> str | None:
+    """First balanced {...} or [...] span, ignoring braces inside strings.
+
+    Needed because a web-search turn often narrates its findings before answering,
+    so the JSON is neither at the start nor the end of the response.
+    """
+    start = min((i for i in (text.find("{"), text.find("[")) if i != -1), default=-1)
+    if start == -1:
+        return None
+    opener = text[start]
+    closer = "}" if opener == "{" else "]"
+    depth, in_string, escaped = 0, False, False
+    for i, ch in enumerate(text[start:], start):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
 def parse_json_response(raw: str):
-    """Parse a JSON object/array from an LLM response, tolerating ``` fences."""
+    """Parse a JSON object/array from an LLM response, tolerating ``` fences and
+    surrounding prose."""
+    # strict=False tolerates literal control chars (e.g. newlines) inside strings.
+    candidates = []
     cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip())
     cleaned = re.sub(r"\s*```$", "", cleaned)
-    # strict=False tolerates literal control chars (e.g. newlines) inside strings.
-    try:
-        return json.loads(cleaned, strict=False)
-    except json.JSONDecodeError as exc:
-        logger.warning(f"LLM-Antwort kein gültiges JSON: {exc} — {cleaned[:120]}")
-        return None
+    candidates.append(cleaned)
+
+    fenced = re.search(r"```(?:json)?\s*(.+?)\s*```", raw, re.DOTALL)
+    if fenced:
+        candidates.append(fenced.group(1))
+
+    span = _balanced_span(raw)
+    if span:
+        candidates.append(span)
+
+    for candidate in candidates:
+        try:
+            return json.loads(candidate, strict=False)
+        except json.JSONDecodeError:
+            continue
+    logger.warning(f"LLM-Antwort kein gültiges JSON — {cleaned[:160]}")
+    return None
 
 
 def builtin_fake() -> "FakeLLM":

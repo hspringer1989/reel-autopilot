@@ -351,6 +351,61 @@ async def _fetch_daily_insights() -> None:
     logger.info(f"Insights für {len(published)} Reels abgerufen")
 
 
+async def _run_evening_autogen() -> None:
+    """Abend-Automatik: Rueckschau, dann ein Reel fuer morgen in die Freigabe-Warteschlange.
+
+    Zuerst der volle Weg (Recherche, Faktencheck, Opener nach Augenschein) — er bildet
+    die Handarbeit nach. Nur wenn der nichts Belegbares findet, greift der RSS-Trend als
+    Sicherheitsnetz; ein Reel aus einem ungeprueften Trend ist immer noch besser als gar
+    keins, aber es ist die zweite Wahl, nicht die erste.
+
+    Jeder Ausgang wird nach Telegram gemeldet. Ein stiller Ausfall ist der schlimmste
+    Fall: dann wartet man morgens auf ein Reel, das nie gebaut wurde.
+    """
+    from src.content.autoreel import generate_autonomous_reel
+    from src.content.reel_feedback import analyse_last_reel
+    from src.pipeline import generate_once
+    from src.review.telegram_bot import review_configured, send_text
+
+    try:
+        feedback = await analyse_last_reel()
+        if review_configured():
+            await send_text(feedback.text)
+    except Exception as exc:  # noqa: BLE001 — die Rueckschau darf die Produktion nie kippen
+        logger.exception(f"Rueckschau fehlgeschlagen: {exc}")
+        feedback = None
+
+    target = feedback.target_seconds if feedback else 40
+
+    note = ""
+    try:
+        result = await generate_autonomous_reel(target_seconds=target)
+        if result.reel_id is not None:
+            logger.info(f"Abend-Automatik: Reel #{result.reel_id} steht zur Freigabe")
+            return
+        note = result.note
+        logger.warning(f"Recherche-Pfad ohne Ergebnis: {note}")
+    except Exception as exc:  # noqa: BLE001
+        note = str(exc)
+        logger.exception(f"Recherche-Pfad fehlgeschlagen: {exc}")
+
+    if review_configured():
+        await send_text(f"ℹ️ Recherche-Pfad ohne Ergebnis ({note}) — "
+                        f"versuche den RSS-Trend.")
+    try:
+        new_id = await generate_once(
+            target_seconds=target,
+            max_age_hours=config.REEL_AUTOGEN_MAX_TREND_AGE_H,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(f"RSS-Pfad fehlgeschlagen: {exc}")
+        new_id = None
+
+    if new_id is None and review_configured():
+        await send_text("⚠️ Abend-Automatik: heute kein Reel erzeugt. "
+                        "Weder Recherche noch RSS-Trend lieferten etwas Belegbares.")
+
+
 async def _run_loop() -> None:
     from src.pipeline import generate_once, handle_regenerates, publish_next_approved
     from src.publish.instagram import publishing_configured
@@ -537,18 +592,7 @@ async def _run_loop() -> None:
                     and config.REEL_AUTOGEN_TIME <= hhmm < config.REEL_AUTOGEN_CATCHUP_UNTIL
                     and (slot_key[0], "autogen") not in done_slots):
                 done_slots.add((slot_key[0], "autogen"))
-                from src.content.reel_feedback import analyse_last_reel
-
-                feedback = await analyse_last_reel()
-                if review_configured():
-                    await send_text(feedback.text)
-                new_id = await generate_once(
-                    target_seconds=feedback.target_seconds,
-                    max_age_hours=config.REEL_AUTOGEN_MAX_TREND_AGE_H,
-                )
-                if new_id is None and review_configured():
-                    await send_text("⚠️ Abend-Automatik: kein Reel erzeugt "
-                                    "(kein Trend über der Score-Schwelle).")
+                await _run_evening_autogen()
 
             # 6) daily insights
             if now.strftime("%H:%M") == _INSIGHTS_SLOT and (slot_key[0], "insights") not in done_slots:
