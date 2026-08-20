@@ -204,6 +204,26 @@ def handle_regenerates() -> list[int]:
     return new_ids
 
 
+def _announcement_exists(path_marker: str) -> bool:
+    """Gibt es zu diesem Beitrag schon eine Ankuendigungs-Story?
+
+    Erkannt am Dateinamen (announce_reel_<id>_… bzw. announce_<id>_…), damit dafuer
+    keine Schema-Aenderung noetig ist. Verhindert, dass ein wiederholt ausgeloester
+    Slot denselben Beitrag mehrfach ankuendigt.
+    """
+    from src.storage.database import StoryRow
+
+    with session_scope() as session:
+        row = session.execute(
+            select(StoryRow).where(
+                StoryRow.kind == "announce",
+                StoryRow.image_path.contains(path_marker),
+                StoryRow.status == "published",
+            )
+        ).scalars().first()
+    return row is not None
+
+
 async def announce_new_reel(reel_id: int) -> str | None:
     """Auto-post a striking 'NEUES REEL' story after a reel goes live — same idea as the
     feed-post announcement. Best-effort: a failure never affects the reel itself."""
@@ -218,11 +238,30 @@ async def announce_new_reel(reel_id: int) -> str | None:
 
     if not publishing_configured():
         return None
+
+    # ⛔ Drei Sperren gegen Ankuendigungen ins Leere (Vorfall 20.08.2026).
+    from src.publish.instagram import media_exists
+
     with session_scope() as session:
         reel = session.get(ReelRow, reel_id)
         if reel is None:
+            logger.warning(f"Ankuendigung fuer Reel #{reel_id} verweigert: existiert nicht")
             return None
         raw = reel.script_json or "{}"
+        status, media = reel.status, (reel.ig_media_id or "")
+
+    if status != "published" or not media:
+        logger.warning(f"Ankuendigung fuer Reel #{reel_id} verweigert: Status "
+                       f"'{status}', Medien-ID '{media or "-"}'")
+        return None
+    if _announcement_exists(f"announce_reel_{reel_id}_"):
+        logger.warning(f"Ankuendigung fuer Reel #{reel_id} verweigert: gibt es schon")
+        return None
+    if not await media_exists(media):
+        logger.warning(f"Ankuendigung fuer Reel #{reel_id} verweigert: Medien-ID "
+                       f"{media} ist bei Instagram nicht auffindbar")
+        return None
+
     data = json.loads(raw) if raw else {}
     # Use the reel's short title — NEVER the full hook (a long hook overflowed the
     # announcement card). render_new_post_story also shrink-fits as a safety net.

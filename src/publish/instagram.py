@@ -46,6 +46,34 @@ def _stage_video(video_path: str) -> tuple[Path, str]:
     return _stage_media(video_path, ".mp4")
 
 
+async def media_exists(media_id: str) -> bool:
+    """Existiert diese Medien-ID wirklich im Konto?
+
+    Wird vor jeder Ankuendigungs-Story gefragt. Die Datenbank kann irren — sie sagt
+    "published", weil der Upload-Aufruf zurueckkam, nicht weil der Beitrag sichtbar
+    ist. Angekuendigt wird nur, was Instagram bestaetigt.
+
+    Bei einem Netzwerk- oder API-Fehler wird False zurueckgegeben: im Zweifel lieber
+    keine Ankuendigung als eine falsche.
+    """
+    if not media_id:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(
+                f"{config.GRAPH_BASE_URL}/{config.GRAPH_API_VERSION}/{media_id}",
+                params={"fields": "id", "access_token": config.IG_ACCESS_TOKEN},
+            )
+        if r.status_code != 200:
+            logger.warning(f"Medien-ID {media_id} nicht abrufbar "
+                           f"(HTTP {r.status_code}) — keine Ankuendigung")
+            return False
+        return bool(r.json().get("id"))
+    except Exception as exc:  # noqa: BLE001 — im Zweifel nicht ankuendigen
+        logger.warning(f"Medien-ID {media_id} nicht pruefbar ({exc}) — keine Ankuendigung")
+        return False
+
+
 async def publish_reel(video_path: str, caption: str) -> str:
     """Publish and return the IG media id. Raises PublishError on failure."""
     if not publishing_configured():
