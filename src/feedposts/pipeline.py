@@ -183,6 +183,32 @@ async def announce_new_feed_post(post_id: int, title: str) -> str | None:
 
     if not publishing_configured():
         return None
+
+    # ⛔ Dieselben drei Sperren wie bei der Reel-Ankuendigung (Vorfall 20.08.2026).
+    # Diese Funktion bekam bisher nur id und Titel und hat blind gepostet.
+    from src.pipeline import _announcement_exists
+    from src.publish.instagram import media_exists
+    from src.storage.database import FeedPostRow
+
+    with session_scope() as session:
+        post = session.get(FeedPostRow, post_id)
+        if post is None:
+            logger.warning(f"Ankuendigung fuer Beitrag #{post_id} verweigert: existiert nicht")
+            return None
+        status, media = post.status, (post.ig_media_id or "")
+
+    if status != "published" or not media:
+        logger.warning(f"Ankuendigung fuer Beitrag #{post_id} verweigert: Status "
+                       f"'{status}', Medien-ID '{media or "-"}'")
+        return None
+    if _announcement_exists(f"announce_{post_id}_"):
+        logger.warning(f"Ankuendigung fuer Beitrag #{post_id} verweigert: gibt es schon")
+        return None
+    if not await media_exists(media):
+        logger.warning(f"Ankuendigung fuer Beitrag #{post_id} verweigert: Medien-ID "
+                       f"{media} ist bei Instagram nicht auffindbar")
+        return None
+
     day = datetime.now(ZoneInfo(config.TIMEZONE))
     path = render_new_post_story(title, str(config.STORY_DIR / f"announce_{post_id}_{_stamp()}.jpg"))
     try:

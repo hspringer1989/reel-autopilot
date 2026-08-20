@@ -112,9 +112,17 @@ def _fake_publish_both(monkeypatch):
 
     async def _story(_path):
         return "IG_STORY"
+
+    async def _exists(_media_id):
+        # Seit den Ankuendigungs-Sperren (Vorfall 20.08.2026) fragt die Ankuendigung
+        # bei Instagram nach, ob die Medien-ID wirklich existiert. Im Test wird das
+        # bejaht — sonst schluege der echte Netzwerkaufruf mit HTTP 400 fehl.
+        return True
+
     monkeypatch.setattr(instagram, "publish_feed_post", _carousel)
     monkeypatch.setattr(instagram, "publish_story", _story)
     monkeypatch.setattr(instagram, "publishing_configured", lambda: True)
+    monkeypatch.setattr(instagram, "media_exists", _exists)
 
 
 async def test_publishing_a_feed_post_auto_announces(monkeypatch):
