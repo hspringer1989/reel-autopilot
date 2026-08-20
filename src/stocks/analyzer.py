@@ -113,12 +113,23 @@ def analyze_ticker(md: MarketData, ticker: str) -> StockMetrics | None:
 
 
 def select_candidates(
-    md: MarketData, universe: list[str], count: int, exclude: set[str] | None = None
+    md: MarketData, universe: list[str], count: int, exclude: set[str] | None = None,
+    last_seen: dict[str, str] | None = None,
 ) -> list[StockMetrics]:
     """Score the whole universe and pick the top `count` by blended score, each from a
     DISTINCT sector. Tickers in `exclude` (recently analysed, 30-day cooldown) are held
-    back and only reused as a last resort so we never return fewer than `count`."""
+    back and only reused as a last resort so we never return fewer than `count`.
+
+    `last_seen` maps ticker -> trade_date of its last appearance. It only matters for
+    that last resort: when the cooldown pool is exhausted, the stock that has been off
+    screen the LONGEST comes back first.
+
+    Why that ordering matters (Vorfall 18.-20.08.2026): the blended score barely moves
+    from one day to the next, so a score-ordered fallback returns the same ticker every
+    single day — LYFT appeared three days running. Age-ordered, the worst case degrades
+    to "the oldest stock returns", which is what a human editor would do too."""
     exclude = {t.upper() for t in (exclude or set())}
+    last_seen = {t.upper(): d for t, d in (last_seen or {}).items()}
     scored = [m for t in universe if (m := analyze_ticker(md, t)) is not None]
     scored.sort(key=lambda m: m.blended, reverse=True)
 
@@ -137,7 +148,24 @@ def select_candidates(
     fresh = [m for m in scored if m.ticker.upper() not in exclude]
     _take(fresh, respect_sectors=True)          # 1) fresh, sector-diversified
     _take(fresh, respect_sectors=False)         # 2) fresh, any sector
-    _take(scored, respect_sectors=False)        # 3) last resort: allow cooldown tickers
+
+    if len(picked) < count:
+        # Notbetrieb: der Cooldown-Pool ist leer. Aeltester Auftritt zuerst; ein
+        # unbekannter Ticker gilt als "nie gezeigt" und kommt damit ganz nach vorn.
+        # Bei gleichem Datum entscheidet weiterhin der Score.
+        stale = sorted(
+            (m for m in scored if m not in picked),
+            key=lambda m: (last_seen.get(m.ticker.upper(), ""), -m.blended),
+        )
+        before = len(picked)
+        _take(stale, respect_sectors=False)     # 3) last resort: allow cooldown tickers
+        reused = [m.ticker for m in picked[before:]]
+        if reused:
+            logger.warning(
+                f"Cooldown erschoepft: nur {before} von {count} frischen Tickern "
+                f"verfuegbar, reaktiviert (aeltester zuerst): {', '.join(reused)}. "
+                f"Universum vergroessern oder STOCK_REPEAT_COOLDOWN_DAYS senken."
+            )
     return picked
 
 
@@ -201,11 +229,13 @@ def _fallback_texts(c: Candidate) -> tuple[str, str, str]:
 def build_candidates(
     md: MarketData, universe: list[str], llm: LLMProvider,
     count: int | None = None, exclude: set[str] | None = None,
+    last_seen: dict[str, str] | None = None,
 ) -> list[Candidate]:
     """Full path: select → risk marks → one educational Claude call for the texts.
-    `exclude` holds recently-analysed tickers (30-day cooldown)."""
+    `exclude` holds recently-analysed tickers (30-day cooldown), `last_seen` their last
+    appearance date (only used once the cooldown pool runs dry — see select_candidates)."""
     count = count or config.STOCK_CANDIDATES_COUNT
-    metrics = select_candidates(md, universe, count, exclude=exclude)
+    metrics = select_candidates(md, universe, count, exclude=exclude, last_seen=last_seen)
     if not metrics:
         logger.warning("Keine Kandidaten mit ausreichenden Daten gefunden")
         return []

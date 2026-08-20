@@ -153,7 +153,14 @@ STOCK_DATA_PROVIDER = _get("STOCK_DATA_PROVIDER", "yfinance")
 # Mix US + EU (EU tickers carry an exchange suffix, e.g. SAP.DE).
 STOCK_UNIVERSE = _get_list(
     "STOCK_UNIVERSE",
-    # ~90 US + EU large/mid caps so the 30-day per-ticker cooldown never runs dry.
+    # ⚠️ KAPAZITAETSREGEL: das Universum muss STOCK_CANDIDATES_COUNT x
+    # STOCK_REPEAT_COOLDOWN_DAYS Ticker tragen, sonst laeuft der Cooldown leer und der
+    # Notbetrieb in select_candidates() wiederholt Ticker. Bei 4/Tag und 30 Tagen sind
+    # das 120 — plus Reserve fuer Doppel-Builds und Ticker ohne verwertbare Daten.
+    # Faustregel: mindestens das Doppelte des Bedarfs.
+    # Vorfall 18.-20.08.2026: 142 Ticker, 120 Bedarf, nur 22 Reserve. Drei Doppel-Builds
+    # Ende Juli haben die Reserve aufgebraucht, danach stand LYFT drei Tage in Folge in
+    # den Storys. Der Kanal Renditeradar faehrt seitdem 279 Ticker per .env.
     # US:
     "AAPL,MSFT,NVDA,AMZN,GOOGL,META,TSLA,BRK-B,JPM,V,MA,JNJ,WMT,PG,HD,XOM,CVX,"
     "KO,PEP,ABBV,MRK,PFE,LLY,BAC,WFC,GS,MS,C,AXP,DIS,NFLX,ADBE,CRM,ORCL,CSCO,"
@@ -167,6 +174,7 @@ STOCK_UNIVERSE = _get_list(
 )
 STOCK_CANDIDATES_COUNT = int(_get("STOCK_CANDIDATES_COUNT", "4"))
 # A ticker analysed as a candidate is not picked again for this many days.
+# Nur wirksam, solange das Universum gross genug ist — siehe Kapazitaetsregel oben.
 STOCK_REPEAT_COOLDOWN_DAYS = int(_get("STOCK_REPEAT_COOLDOWN_DAYS", "30"))
 # Daily news-driven "Trend-Aktie" story (one stock most in the news, same cooldown pool).
 STOCK_TREND_ENABLED = _get("STOCK_TREND_ENABLED", "true").lower() == "true"

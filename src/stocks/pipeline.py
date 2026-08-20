@@ -12,7 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import config
 from src.content.llm import LLMProvider, get_llm
@@ -52,6 +52,22 @@ def _recent_candidate_tickers(cooldown_days: int) -> set[str]:
             )
         ).scalars().all()
     return {t for t in rows}
+
+
+def _last_seen_tickers() -> dict[str, str]:
+    """Ticker -> trade_date des letzten Auftritts, ueber die GESAMTE Historie.
+
+    Bewusst ohne Cooldown-Fenster: gebraucht wird das erst, wenn der Cooldown leer ist,
+    und dann ist genau die Frage interessant, welcher Ticker am laengsten weg war."""
+    with session_scope() as session:
+        rows = session.execute(
+            select(StoryRow.ticker, func.max(StoryRow.trade_date)).where(
+                StoryRow.kind.in_(("candidate", "trend")),
+                StoryRow.ticker != "",
+                StoryRow.status.in_(("pending_review", "approved", "published", "rejected")),
+            ).group_by(StoryRow.ticker)
+        ).all()
+    return {t.upper(): d for t, d in rows if t}
 
 
 def _persist(kind: str, image_path: str, caption: str, trade_date: str,
@@ -100,7 +116,22 @@ def build_daily_stories(
     if exclude:
         logger.info(f"Cooldown: {len(exclude)} Ticker der letzten "
                     f"{config.STOCK_REPEAT_COOLDOWN_DAYS} Tage ausgeschlossen")
-    candidates = build_candidates(md, config.STOCK_UNIVERSE, llm, exclude=exclude)
+
+    # Frueh-Warnung, BEVOR der Pool leerlaeuft. Der Vorfall vom 18.-20.08.2026 blieb
+    # wochenlang unbemerkt, weil der Notbetrieb lautlos ansprang; ein Universum, das
+    # nur noch wenige Tage traegt, muss deshalb im Log auffallen.
+    free = len({t.upper() for t in config.STOCK_UNIVERSE} - {t.upper() for t in exclude})
+    per_day = config.STOCK_CANDIDATES_COUNT
+    if free < per_day * 3:
+        logger.warning(
+            f"Ticker-Vorrat knapp: nur noch {free} freie von "
+            f"{len(config.STOCK_UNIVERSE)} Tickern, Verbrauch {per_day}/Tag "
+            f"(reicht {free // per_day if per_day else 0} Tage). Universum vergroessern "
+            f"oder STOCK_REPEAT_COOLDOWN_DAYS senken."
+        )
+
+    candidates = build_candidates(md, config.STOCK_UNIVERSE, llm, exclude=exclude,
+                                  last_seen=_last_seen_tickers())
     if not candidates:
         logger.warning("Keine Kandidaten — nur Earnings-Story erstellt")
         return story_ids
