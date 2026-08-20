@@ -64,14 +64,24 @@ def collect_and_score(llm: LLMProvider | None = None) -> int:
     return scored
 
 
-def pick_best_trend() -> TrendRow | None:
-    """Highest-scored unused trend above the threshold."""
+def pick_best_trend(max_age_hours: int | None = None) -> TrendRow | None:
+    """Highest-scored unused trend above the threshold.
+
+    `max_age_hours` limits the pick to recent trends. Without it the query returns the
+    all-time best leftover — when this was written the top-scored open trend was nine
+    days old. That is fine for filling a queue on demand, but wrong for a DAILY reel,
+    where stale news is worse than no news.
+    """
+    from datetime import datetime, timedelta, timezone
+
     with session_scope() as session:
-        return session.execute(
-            select(TrendRow)
-            .where(TrendRow.status == "scored", TrendRow.score_total >= config.MIN_TREND_SCORE)
-            .order_by(TrendRow.score_total.desc())
-        ).scalars().first()
+        query = select(TrendRow).where(
+            TrendRow.status == "scored", TrendRow.score_total >= config.MIN_TREND_SCORE
+        )
+        if max_age_hours:
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+            query = query.where(TrendRow.created_at >= cutoff)
+        return session.execute(query.order_by(TrendRow.score_total.desc())).scalars().first()
 
 
 def _script_to_json(script: ReelScript) -> str:
@@ -84,7 +94,8 @@ def script_from_json(raw: str) -> ReelScript:
     return ReelScript(**data)
 
 
-def produce_reel(trend: TrendRow, llm: LLMProvider | None = None) -> int | None:
+def produce_reel(trend: TrendRow, llm: LLMProvider | None = None,
+                 target_seconds: int | None = None) -> int | None:
     """Script → TTS → render for one trend. Returns the reel id (pending_review)
     or None if a stage failed (trend is then released for another attempt)."""
     llm = llm or get_llm()
@@ -96,6 +107,7 @@ def produce_reel(trend: TrendRow, llm: LLMProvider | None = None) -> int | None:
         TrendItem(source=trend.source, title=trend.title, summary=trend.summary, url=trend.url),
         llm,
         article=article,
+        target_seconds=target_seconds,
     )
     if script is None:
         logger.warning(f"Kein Skript für Trend #{trend.id} — übersprungen")
@@ -153,20 +165,27 @@ def produce_reel(trend: TrendRow, llm: LLMProvider | None = None) -> int | None:
     return reel_id
 
 
-async def generate_once(collect: bool = True) -> int | None:
-    """Full chain for one reel; sends it to the Telegram review queue if configured."""
+async def generate_once(collect: bool = True,
+                        target_seconds: int | None = None,
+                        max_age_hours: int | None = None) -> int | None:
+    """Full chain for one reel; sends it to the Telegram review queue if configured.
+    `target_seconds` overrides the configured length — the evening automation derives it
+    from how long viewers actually watched the previous reel."""
     llm = get_llm()
-    trend = pick_best_trend()
+    trend = pick_best_trend(max_age_hours)
     if trend is None and collect:
         # to_thread: rendering/HTTP must not stall the Telegram poller in `run`
         await asyncio.to_thread(collect_and_score, llm)
-        trend = pick_best_trend()
+        trend = pick_best_trend(max_age_hours)
     if trend is None:
-        logger.warning(f"Kein Trend über Score-Schwelle {config.MIN_TREND_SCORE} verfügbar")
+        age_note = f", jünger als {max_age_hours} h" if max_age_hours else ""
+        logger.warning(
+            f"Kein Trend über Score-Schwelle {config.MIN_TREND_SCORE}{age_note} verfügbar"
+        )
         return None
     logger.info(f"Bester Trend (#{trend.id}, Score {trend.score_total:.2f}): {trend.title}")
 
-    reel_id = await asyncio.to_thread(produce_reel, trend, llm)
+    reel_id = await asyncio.to_thread(produce_reel, trend, llm, target_seconds)
     if reel_id is None:
         return None
 
