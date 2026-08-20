@@ -35,11 +35,15 @@ Gib genau diese JSON-Struktur zurück:
 
 
 def generate_script(trend: TrendItem, llm: LLMProvider,
-                    article: str | None = None) -> ReelScript | None:
+                    article: str | None = None,
+                    target_seconds: int | None = None) -> ReelScript | None:
     """`article` is the fetched source text (src/content/article.py). Without it the agent
     only sees the feed summary — which for some feeds is the headline again, and writing
     five segments from a headline is what produces invented detail."""
-    target_words = int(config.REEL_TARGET_SECONDS * _WORDS_PER_SECOND)
+    # Ziellänge kommt normalerweise aus der Config, kann aber je Lauf gesetzt werden
+    # (die abendliche Rückschau leitet sie aus der Sehdauer des letzten Reels ab).
+    target_seconds = target_seconds or config.REEL_TARGET_SECONDS
+    target_words = int(target_seconds * _WORDS_PER_SECOND)
     article_block = (
         f"\nVOLLTEXT DER QUELLE (deine Faktengrundlage — was hier nicht steht, "
         f"behauptest du nicht):\n{article.strip()[:6000]}\n" if article else ""
@@ -52,7 +56,7 @@ def generate_script(trend: TrendItem, llm: LLMProvider,
             source=trend.source,
             article=article_block,
             target_words=target_words,
-            target_seconds=config.REEL_TARGET_SECONDS,
+            target_seconds=target_seconds,
             hashtag_hint=config.PROFILE.REEL_HASHTAG_HINT,
         ),
         model=config.CLAUDE_MODEL,

@@ -90,6 +90,16 @@ FFMPEG_BIN = _get("FFMPEG_BIN", "ffmpeg")
 REEL_WIDTH = 1080
 REEL_HEIGHT = 1920
 REEL_TARGET_SECONDS = int(_get("REEL_TARGET_SECONDS", "45"))
+# Abendliche Reel-Automatik: Rückschau auf das letzte Reel, dann ein neues Reel für den
+# Folgetag in die Telegram-Freigabe. Veröffentlicht wird es am nächsten POSTING_SLOT.
+# Leer = aus (dann füllt nur die alte, bedarfsgesteuerte Nachgenerierung die Queue).
+REEL_AUTOGEN_TIME = _get("REEL_AUTOGEN_TIME", "")
+# Wie beim Story-Build: Wenn der Prozess in genau dieser Minute nicht tickt (Neustart,
+# langer Tick), bis zu diesem Cutoff nachholen statt den Tag auszulassen.
+REEL_AUTOGEN_CATCHUP_UNTIL = _get("REEL_AUTOGEN_CATCHUP_UNTIL", "23:00")
+# Ein Tages-Reel darf nur aus frischen Trends entstehen. Ohne diese Grenze zieht die
+# Auswahl den bestbewerteten offenen Trend überhaupt, und der kann Tage alt sein.
+REEL_AUTOGEN_MAX_TREND_AGE_H = int(_get("REEL_AUTOGEN_MAX_TREND_AGE_H", "36"))
 MUSIC_DIR = BASE_DIR / "assets" / "music"
 MUSIC_VOLUME_DB = float(_get("MUSIC_VOLUME_DB", "-18"))
 
