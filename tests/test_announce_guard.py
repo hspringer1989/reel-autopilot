@@ -24,6 +24,13 @@ def posted(monkeypatch):
     async def _exists(media_id):
         return media_id == "live-123"
 
+    # Der Schalter kommt sonst aus der .env des jeweiligen Rechners. Auf dem Server
+    # stand er kurzzeitig auf false (Vorfall 20.08.2026) — dann lief announce_new_reel
+    # sofort ins Leere und die Gegenprobe schlug fehl, ohne dass am Code etwas falsch
+    # war. Ein Test darf nicht davon abhaengen, wie die Anlage gerade konfiguriert ist.
+    import config
+
+    monkeypatch.setattr(config, "FEED_ANNOUNCE_STORY", True)
     monkeypatch.setattr("src.publish.instagram.publish_story", _publish_story)
     monkeypatch.setattr("src.publish.instagram.publishing_configured", lambda: True)
     monkeypatch.setattr("src.publish.instagram.media_exists", _exists)
