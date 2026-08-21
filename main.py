@@ -16,7 +16,9 @@
 """
 import argparse
 import asyncio
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from loguru import logger
@@ -351,6 +353,73 @@ async def _fetch_daily_insights() -> None:
     logger.info(f"Insights für {len(published)} Reels abgerufen")
 
 
+def _slot_due(hhmm: str, slot: str, catchup_min: int) -> bool:
+    """Ist dieser Slot faellig — jetzt oder im Nachholfenster danach?
+
+    Die Schleife tickt nicht zuverlaessig jede Minute: sie schlaeft 60 s am ENDE des
+    Durchlaufs, und der Tages-Story-Build braucht regelmaessig ueber drei Minuten.
+    Eine exakte Minutengleichheit verliert den Slot dann fuer den ganzen Tag —
+    am 21.08.2026 kostete das ein freigegebenes Reel.
+
+    Verglichen wird in Minuten seit Mitternacht, nicht als Zeichenkette, damit das
+    Fenster auch ueber eine volle Stunde hinweg richtig rechnet.
+    """
+    def _min(t: str) -> int:
+        h, m = t.split(":")
+        return int(h) * 60 + int(m)
+
+    now, start = _min(hhmm), _min(slot)
+    return start <= now < start + catchup_min
+
+
+class _SlotLedger:
+    """Was heute schon gelaufen ist — ueber Neustarts hinweg.
+
+    Ohne diese Persistenz waere das Nachholfenster gefaehrlich: ein Neustart um 09:30
+    wuerde den 09:00-Slot erneut ausloesen. Frueher lag das nur im Arbeitsspeicher,
+    weshalb ein Neustart im Vormittagsfenster doppelte Watchlist-Stapel erzeugte.
+
+    Bewusst eine kleine JSON-Datei statt einer Tabelle: der Inhalt ist pro Tag ein
+    paar Dutzend Bytes, er wird beim Start gelesen und ueberlebt einen Absturz.
+    """
+
+    _KEEP_DAYS = 3
+
+    def __init__(self, path: Path):
+        self._path = path
+        self._done: dict[str, set[str]] = {}
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            self._done = {d: set(v) for d, v in raw.items()}
+        except Exception:  # noqa: BLE001 — fehlende oder kaputte Datei: leer starten
+            self._done = {}
+
+    def __contains__(self, key: tuple[str, str]) -> bool:
+        day, label = key
+        return label in self._done.get(day, set())
+
+    def add(self, key: tuple[str, str]) -> None:
+        day, label = key
+        self._done.setdefault(day, set()).add(label)
+        for old in sorted(self._done)[:-self._KEEP_DAYS]:
+            del self._done[old]
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(
+                json.dumps({d: sorted(v) for d, v in self._done.items()},
+                           ensure_ascii=False),
+                encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 — nicht schreiben zu koennen darf
+            logger.warning(f"Slot-Merkliste nicht speicherbar: {exc}")  # den Lauf nicht kippen
+
+
+# Nachholfenster je Slot-Art. Kurz, wo das Publikum die Uhrzeit merkt; laenger, wo
+# der Slot nur intern etwas anstoesst.
+_CATCHUP_POST_MIN = 90      # Veroeffentlichungen: lieber spaet als gar nicht
+_CATCHUP_STORY_MIN = 45     # Story-Slots liegen dicht beieinander
+_CATCHUP_INTERNAL_MIN = 180  # Bauen, Erinnerungen, Auswertungen
+
+
 async def _run_evening_autogen() -> None:
     """Abend-Automatik: Rueckschau, dann ein Reel fuer morgen in die Freigabe-Warteschlange.
 
@@ -432,7 +501,8 @@ async def _run_loop() -> None:
         await telegram_app.updater.start_polling()
         logger.info("Telegram-Review-Bot lauscht")
 
-    done_slots: set[tuple[str, str]] = set()  # (date, HH:MM) already handled
+    # Ueberlebt Neustarts — sonst feuert ein Slot im Nachholfenster ein zweites Mal.
+    done_slots = _SlotLedger(Path(config.DATA_DIR) / "slot_ledger.json")
     last_generate = 0.0
     last_community_poll = 0.0
     last_milestone_check = 0.0
@@ -468,7 +538,8 @@ async def _run_loop() -> None:
             # 3) posting slots
             if (
                 publishing_configured()
-                and now.strftime("%H:%M") in config.POSTING_SLOTS
+                and any(_slot_due(now.strftime("%H:%M"), s, _CATCHUP_POST_MIN)
+                        for s in config.POSTING_SLOTS)
                 and slot_key not in done_slots
             ):
                 done_slots.add(slot_key)
@@ -504,7 +575,8 @@ async def _run_loop() -> None:
                                 await send_text(f"⚠️ Tages-Story-Build fehlgeschlagen: {exc}")
 
                 if publishing_configured():
-                    if hhmm == config.STORY_POST_EARNINGS_SLOT and (slot_key[0], "story_morning") not in done_slots:
+                    if (_slot_due(hhmm, config.STORY_POST_EARNINGS_SLOT, _CATCHUP_STORY_MIN)
+                            and (slot_key[0], "story_morning") not in done_slots):
                         done_slots.add((slot_key[0], "story_morning"))
                         for kinds in (["earnings"], ["candidates"]):
                             sid = await publish_next_story(kinds=kinds)
@@ -520,7 +592,8 @@ async def _run_loop() -> None:
                                 await send_text(f"📤 Story #{sid} nachgeholt (nach dem 09:30-Slot freigegeben).")
                     for market, slots in (("EU", config.STORY_SLOTS_EU), ("US", config.STORY_SLOTS_US)):
                         key = (slot_key[0], f"story_{market}_{hhmm}")
-                        if hhmm in slots and key not in done_slots:
+                        if (any(_slot_due(hhmm, s, _CATCHUP_STORY_MIN) for s in slots)
+                                and key not in done_slots):
                             done_slots.add(key)
                             posted = await publish_next_candidate_group(market=market)
                             trend = await publish_next_candidate_group(market=market, kind="trend")
@@ -548,7 +621,8 @@ async def _run_loop() -> None:
             # 5) feed posts (2×/week): generate on a feed-slot day at the morning build
             #    tick, post at the exact slot time (weekday + HH:MM).
             feed_today = _feed_slots_today(now)
-            if (feed_today and hhmm == config.DAILY_BUILD_SLOT
+            if (feed_today
+                    and _slot_due(hhmm, config.DAILY_BUILD_SLOT, _CATCHUP_INTERNAL_MIN)
                     and (slot_key[0], "feed_build") not in done_slots):
                 done_slots.add((slot_key[0], "feed_build"))
                 with session_scope() as session:
@@ -565,7 +639,8 @@ async def _run_loop() -> None:
                 for slot in feed_today:
                     slot_time = slot.split()[1]
                     key = (slot_key[0], f"feed_post_{slot_time}")
-                    if hhmm == slot_time and key not in done_slots:
+                    if (_slot_due(hhmm, slot_time, _CATCHUP_POST_MIN)
+                            and key not in done_slots):
                         done_slots.add(key)
                         pid = await publish_next_feed_post()
                         if pid and review_configured():
@@ -578,7 +653,7 @@ async def _run_loop() -> None:
 
             # 5b) weekly editorial reminder + auto topic proposal (Sunday)
             if (now.weekday() == _WEEKDAYS.get(config.FEED_EDITORIAL_DAY.upper(), 6)
-                    and hhmm == config.FEED_EDITORIAL_TIME
+                    and _slot_due(hhmm, config.FEED_EDITORIAL_TIME, _CATCHUP_INTERNAL_MIN)
                     and (slot_key[0], "editorial") not in done_slots):
                 done_slots.add((slot_key[0], "editorial"))
                 from src.feedposts.editorial import send_editorial_reminder
@@ -595,7 +670,8 @@ async def _run_loop() -> None:
                 await _run_evening_autogen()
 
             # 6) daily insights
-            if now.strftime("%H:%M") == _INSIGHTS_SLOT and (slot_key[0], "insights") not in done_slots:
+            if (_slot_due(now.strftime("%H:%M"), _INSIGHTS_SLOT, _CATCHUP_INTERNAL_MIN)
+                    and (slot_key[0], "insights") not in done_slots):
                 done_slots.add((slot_key[0], "insights"))
                 if publishing_configured():
                     await _fetch_daily_insights()
@@ -615,7 +691,7 @@ async def _run_loop() -> None:
 
                         await poll_dms()
                 if (config.COMMUNITY_DIGEST_ENABLED
-                        and hhmm == config.COMMUNITY_DIGEST_SLOT
+                        and _slot_due(hhmm, config.COMMUNITY_DIGEST_SLOT, _CATCHUP_INTERNAL_MIN)
                         and (slot_key[0], "digest") not in done_slots):
                     done_slots.add((slot_key[0], "digest"))
                     from src.community.digest import build_digest
@@ -633,7 +709,7 @@ async def _run_loop() -> None:
 
             # 9) weekly 'Website-Hinweis' story — every Friday 20:00 (fixed card, auto-post)
             if (config.ENABLE_BIO_HINT and publishing_configured()
-                    and now.weekday() == 4 and hhmm == "20:00"
+                    and now.weekday() == 4 and _slot_due(hhmm, "20:00", _CATCHUP_STORY_MIN)
                     and (slot_key[0], "bio_hint") not in done_slots):
                 done_slots.add((slot_key[0], "bio_hint"))
                 from src.bio_hint import post_bio_hint_story
