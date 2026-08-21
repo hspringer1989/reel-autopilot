@@ -111,6 +111,94 @@ class Research:
     note: str = ""
 
 
+_WEEK_SYSTEM = """Du baust die woechentliche Vorschau auf die kommende Boersenwoche
+fuer einen deutschen Finanz-Instagram-Kanal (Zielgruppe: Berufstaetige 25-45 ohne oder
+mit ungenutztem Depot).
+
+DAS WICHTIGSTE ZUERST: Das wird ein TERMINKALENDER MIT NUTZWERT, keine Prognose.
+Gemessen an diesem Kanal: reine Vorschauen ("was der Markt naechste Woche macht")
+lagen bei 0,47x der Followerzahl, ein konkreter Wochen-Fahrplan mit Terminen bei 5,9x.
+Der Unterschied ist, dass man den Fahrplan speichern kann. Sage also, WAS WANN
+ansteht und WORAUF man achten kann — niemals, was daraufhin passieren wird.
+
+REGELN
+- Vier bis fuenf Termine, jeder mit Wochentag UND Datum.
+- Nur Termine, die bereits offiziell angesetzt sind. Nichts Vermutetes.
+- Mische die Ebenen: Notenbank oder Konjunkturdaten, ein bis zwei grosse
+  Quartalszahlen, ein Termin mit Alltagsbezug (Preise, Energie, Arbeitsmarkt).
+- Keine Kauf- oder Verkaufsempfehlung, keine Kursziele, keine Erwartung formulieren
+  wie "duerfte steigen".
+- Zu jedem Termin gehoert in einem Halbsatz, warum er jemanden ohne Depot angeht.
+- Das Aha ist der eine Termin, den fast niemand auf dem Zettel hat, der aber am
+  meisten aussagt.
+
+Beginne die Antwort unmittelbar mit der geschweiften Klammer, keine Vorrede. Meldet
+die Websuche ein Limit, gib trotzdem das JSON aus dem aus, was du schon hast.
+
+{
+  "topic": "Boersenwoche <Datum bis Datum>: die Termine",
+  "title": "Arbeitstitel fuer die Ankuendigungs-Story",
+  "why_now": "welcher Zeitraum abgedeckt wird, mit Datum",
+  "loudness": "welcher Termin der Woche am breitesten laeuft",
+  "facts": ["Wochentag, Datum: Termin — warum er zaehlt", "..."],
+  "evidence": {"exakt derselbe Termin-Text wie oben":
+               "Quelle + woertliches Zitat, das Datum und Termin belegt"},
+  "aha": "der unterschaetzte Termin und was er verraet",
+  "relevance": "was die Woche fuer das Geld eines Normalverdieners bedeutet",
+  "sources": ["Quellenname oder URL", "..."],
+  "rejected": []
+}"""
+
+
+def research_week_ahead(llm: LLMProvider, day_label: str) -> Research:
+    """Die Sonntags-Vorschau: Termine der kommenden Boersenwoche.
+
+    Laeuft ueber denselben Faktencheck wie die Tagesrecherche — bei einer Vorschau ist
+    das sogar wichtiger, weil Wochenvorschauen Termine notorisch falsch datieren.
+    """
+    raw = llm.research(
+        system=_WEEK_SYSTEM,
+        user=(f"Heute ist der {day_label}. Das Reel erscheint morgen frueh um 09:00, "
+              f"also am Sonntag. Recherchiere die offiziell angesetzten Termine der "
+              f"kommenden Handelswoche (Montag bis Freitag) und baue daraus den "
+              f"Fahrplan."),
+        model=config.CLAUDE_MODEL,
+        max_tokens=8000,
+        purpose="reel_week_ahead",
+        max_searches=5,
+    )
+    data = parse_json_response(raw)
+    if not isinstance(data, dict) or not data.get("facts"):
+        logger.warning("Wochenvorschau lieferte kein brauchbares JSON")
+        return Research(ok=False, note="Wochenvorschau ohne verwertbares Ergebnis")
+
+    logger.info(f"Wochenvorschau: {data.get('topic')}")
+    checked = _verify_facts(llm, data, day_label)
+    if not isinstance(checked, dict):
+        logger.warning("Faktencheck der Wochenvorschau ohne Ergebnis")
+        return Research(ok=False, note="Faktencheck der Wochenvorschau fehlgeschlagen")
+
+    verified = [str(f) for f in (checked.get("verified") or []) if str(f).strip()]
+    dropped = [str(f) for f in (checked.get("dropped") or [])]
+    if len(verified) < 3:
+        # Ein Fahrplan mit zwei Terminen ist kein Fahrplan.
+        logger.warning(f"Wochenvorschau nur {len(verified)} belegte Termine")
+        return Research(ok=False, dropped=dropped,
+                        note=f"Wochenvorschau: nur {len(verified)} belegte Termine")
+
+    return Research(
+        ok=True,
+        topic=str(data.get("topic") or "Boersenwoche"),
+        title=str(data.get("title") or data.get("topic") or "Die Woche"),
+        facts=verified,
+        aha=str(data.get("aha") or ""),
+        relevance=str(data.get("relevance") or ""),
+        why_now=str(data.get("why_now") or ""),
+        sources=[str(q) for q in (data.get("sources") or [])],
+        dropped=dropped,
+    )
+
+
 def research_topic(llm: LLMProvider, day_label: str,
                    recent_topics: list[str] | None = None) -> Research:
     """Thema finden und die Fakten gegenprüfen. Gibt bei jedem Zweifel `ok=False`

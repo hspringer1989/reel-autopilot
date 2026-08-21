@@ -27,7 +27,7 @@ from sqlalchemy import select
 import config
 from src.content.llm import LLMProvider, get_llm, parse_json_response
 from src.content.opener import pick_opener
-from src.content.research import Research, research_topic
+from src.content.research import Research, research_topic, research_week_ahead
 from src.models import ReelScript, ScriptSegment
 from src.storage.database import ReelRow, session_scope
 
@@ -71,6 +71,15 @@ Antworte ausschließlich mit diesem JSON:
 class AutoReel:
     reel_id: int | None
     note: str
+
+
+def ist_vorschautag(jetzt: datetime) -> bool:
+    """Wird an diesem Abend die Sonntags-Wochenvorschau gebaut?
+
+    Die Automatik baut abends fuer den FOLGETAG. Die Vorschau soll sonntags
+    erscheinen, gebaut wird sie also am Samstag. weekday(): Montag 0 ... Samstag 5.
+    """
+    return jetzt.weekday() == 5
 
 
 def _recent_topics(limit: int = 12) -> list[str]:
@@ -129,6 +138,44 @@ def _opener_history_note(limit: int = 10) -> str:
     return "\n".join(f"- {n}" for n in notes)
 
 
+def check_script_rules(texts: list[str]) -> list[str]:
+    """Prueft die harten Sprechregeln nach. Gibt die Verstoesse in Klartext zurueck.
+
+    Der Prompt bittet um diese Regeln, aber eine Bitte ist keine Zusicherung: das
+    Skript von Reel #107 (21.08.2026) hatte vier Gedankenstriche statt einem und
+    benutzte "PMI" ungeklaert. Beides sind belegte Ursachen — Gedankenstriche fuer
+    schiefe Betonung, Fachbegriffe fuer Abspringen in den ersten Sekunden.
+    """
+    voll = " ".join(texts)
+    verstoesse: list[str] = []
+
+    striche = voll.count("—") + voll.count(" – ")
+    if striche > 1:
+        verstoesse.append(
+            f"{striche} Gedankenstriche, erlaubt ist einer. Ersetze sie durch "
+            f"eigene Saetze oder durch 'nicht X, sondern Y'.")
+
+    if any(ch.isdigit() for ch in voll):
+        ziffern = "".join(ch if ch.isdigit() else " " for ch in voll).split()
+        verstoesse.append(
+            f"Ziffern im Sprechtext ({', '.join(ziffern[:5])}). Zahlen werden "
+            f"ausgeschrieben; die Ziffern stehen im Bild.")
+
+    for kuerzel in ("PMI", "KGV", "RSI", "ETF", "BIP", "EBIT", "ROI", "IPO"):
+        if kuerzel in voll:
+            verstoesse.append(
+                f"'{kuerzel}' ist ein Fachkuerzel. Umschreibe es in Alltagssprache, "
+                f"die Schreibweise kann auf dem Bild stehen.")
+
+    if voll.count(":") > 1:
+        verstoesse.append("Mehr als ein Doppelpunkt-Einstieg — klingt wie eine Liste.")
+
+    if not texts[-1].rstrip().endswith("Folge für Börse, die man versteht!"):
+        verstoesse.append("Das letzte Segment endet nicht mit dem festen Abbinder.")
+
+    return verstoesse
+
+
 def _write_script(llm: LLMProvider, research: Research,
                   target_seconds: int) -> dict | None:
     words = int(target_seconds * 2.3)
@@ -150,6 +197,31 @@ def _write_script(llm: LLMProvider, research: Research,
     ))
     if not isinstance(data, dict) or not data.get("segments"):
         return None
+
+    # Einmal nachbessern lassen. Zweimal lohnt nicht: wer die Regeln nach einer
+    # konkreten Ruege nicht einhaelt, haelt sie auch beim dritten Mal nicht ein.
+    verstoesse = check_script_rules([str(s) for s in data["segments"]])
+    if verstoesse:
+        logger.warning("Skript verletzt Sprechregeln, fordere Korrektur an: "
+                       + " | ".join(verstoesse))
+        korrektur = parse_json_response(llm.complete(
+            system=_SCRIPT_SYSTEM,
+            user=(user + "\n\nDEIN ENTWURF WAR:\n"
+                  + "\n".join(str(s) for s in data["segments"])
+                  + "\n\nER VERLETZT DIESE REGELN:\n"
+                  + "\n".join(f"- {v}" for v in verstoesse)
+                  + "\n\nGib dasselbe Skript korrigiert zurueck. Inhalt und Zahlen "
+                    "bleiben, nur die Form aendert sich."),
+            model=config.CLAUDE_MODEL, max_tokens=2500,
+            purpose="auto_reel_script_fix",
+        ))
+        if isinstance(korrektur, dict) and korrektur.get("segments"):
+            rest = check_script_rules([str(s) for s in korrektur["segments"]])
+            if len(rest) < len(verstoesse):
+                if rest:
+                    logger.warning("Nach Korrektur noch offen: " + " | ".join(rest))
+                return korrektur
+        logger.warning("Korrektur brachte nichts — Entwurf wird so verwendet")
     return data
 
 
@@ -162,7 +234,17 @@ async def generate_autonomous_reel(target_seconds: int = 40) -> AutoReel:
     llm = get_llm()
     day_label = datetime.now().strftime("%d.%m.%Y")
 
-    research = research_topic(llm, day_label, recent_topics=_recent_topics())
+    if ist_vorschautag(datetime.now()):
+        logger.info("Samstag — es wird die Sonntags-Wochenvorschau gebaut")
+        research = research_week_ahead(llm, day_label)
+        if not research.ok:
+            # Lieber ein normales Tagesthema als gar kein Sonntagsreel.
+            logger.warning(f"Wochenvorschau fehlgeschlagen ({research.note}) — "
+                           f"weiche auf ein Tagesthema aus")
+            research = research_topic(llm, day_label, recent_topics=_recent_topics())
+    else:
+        research = research_topic(llm, day_label, recent_topics=_recent_topics())
+
     if not research.ok:
         return AutoReel(None, f"Kein belastbares Thema: {research.note}")
 
@@ -215,6 +297,16 @@ async def generate_autonomous_reel(target_seconds: int = 40) -> AutoReel:
         row.audio_path = tts.audio_path
         row.video_path = str(video)
         row.status = "pending_review"
+
+    # Ohne diesen Versand passiert nach aussen nichts: das Reel liegt fertig in der
+    # Datenbank und niemand erfaehrt davon (Vorfall 21.08.2026, Reel #107).
+    from src.review.telegram_bot import review_configured, send_for_review
+
+    if review_configured():
+        await send_for_review(reel_id, str(video), caption)
+    else:
+        logger.warning(f"Reel #{reel_id} fertig, aber keine Telegram-Freigabe "
+                       f"konfiguriert — es wird niemand danach fragen")
 
     logger.info(f"Autonomes Reel #{reel_id} fertig: {research.topic}")
     return AutoReel(reel_id, f"{research.topic} (Opener {choice.video_id})")
