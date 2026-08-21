@@ -36,7 +36,8 @@ _SCRIPT_SYSTEM = """Du schreibst das Sprechskript für ein deutsches Finanz-Reel
 HARTE REGELN (aus der Auswertung des Kanals, jede einzeln belegt):
 
 LÄNGE UND AUFBAU
-- Ziellänge wird vorgegeben. Rechne mit rund 2,3 gesprochenen Wörtern pro Sekunde.
+- Ziellänge wird vorgegeben. Rechne mit rund 1,95 gesprochenen Wörtern pro Sekunde
+  (ausgeschriebene Zahlwörter kosten Zeit). Lieber kürzer als länger.
 - Die AUFLÖSUNG steht in den ersten zehn Sekunden, nicht der Aufbau. Erst die
   Pointe, dann der Beleg. Gemessen: die Sehdauer entscheidet über die Reichweite,
   und wer erst aufbaut, verliert die Zuschauer vor der Pointe.
@@ -138,7 +139,56 @@ def _opener_history_note(limit: int = 10) -> str:
     return "\n".join(f"- {n}" for n in notes)
 
 
-def check_script_rules(texts: list[str]) -> list[str]:
+_EINER = ("", "ein", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun")
+_ZEHNER = ("", "zehn", "zwanzig", "dreißig", "vierzig", "fünfzig",
+           "sechzig", "siebzig", "achtzig", "neunzig")
+_TEENS = ("zehn", "elf", "zwölf", "dreizehn", "vierzehn", "fünfzehn",
+          "sechzehn", "siebzehn", "achtzehn", "neunzehn")
+
+
+def jahr_als_wort(jahr: int) -> str:
+    """Jahreszahl ab 2000 als deutsches Zahlwort, so wie es gesprochen wird."""
+    rest = jahr - 2000
+    if rest == 0:
+        return "zweitausend"
+    if rest < 10:
+        return "zweitausend" + _EINER[rest]
+    if rest < 20:
+        return "zweitausend" + _TEENS[rest - 10]
+    zehner, einer = divmod(rest, 10)
+    if einer == 0:
+        return "zweitausend" + _ZEHNER[zehner]
+    return f"zweitausend{_EINER[einer]}und{_ZEHNER[zehner]}"
+
+
+def _norm_jahr(wort: str) -> str:
+    """Schreibvarianten desselben Jahres angleichen.
+
+    Das Modell schreibt mal "zweitausendsechsundzwanzig", mal
+    "zweitausendundsechsundzwanzig". Dieselbe Zahl — ohne Angleichung gaebe das
+    einen Fehlalarm, und ein Fehlalarm pro Lauf kostet einen Korrekturdurchgang.
+    """
+    w = wort.lower().replace("ß", "ss")
+    if w.startswith("zweitausendund"):
+        w = "zweitausend" + w[len("zweitausendund"):]
+    return w
+
+
+def _jahre_im_text(text: str) -> set[str]:
+    """Alle ausgeschriebenen 'zweitausend…'-Formen im Sprechtext."""
+    gefunden: set[str] = set()
+    klein = text.lower()
+    start = 0
+    while (i := klein.find("zweitausend", start)) != -1:
+        ende = i + len("zweitausend")
+        while ende < len(klein) and klein[ende].isalpha():
+            ende += 1
+        gefunden.add(klein[i:ende])
+        start = ende
+    return gefunden
+
+
+def check_script_rules(texts: list[str], facts: list[str] | None = None) -> list[str]:
     """Prueft die harten Sprechregeln nach. Gibt die Verstoesse in Klartext zurueck.
 
     Der Prompt bittet um diese Regeln, aber eine Bitte ist keine Zusicherung: das
@@ -170,6 +220,23 @@ def check_script_rules(texts: list[str]) -> list[str]:
     if voll.count(":") > 1:
         verstoesse.append("Mehr als ein Doppelpunkt-Einstieg — klingt wie eine Liste.")
 
+    # Ausgeschriebene Jahreszahlen gegen die belegten Fakten halten. Bei #108 wurde
+    # aus 2026 beim Ausschreiben "zweitausendundzwanzig" — Form korrekt, Jahr falsch.
+    if facts:
+        erlaubt = set()
+        for f in facts:
+            for i in range(len(f) - 3):
+                stueck = f[i:i + 4]
+                if stueck.isdigit() and 2000 <= int(stueck) <= 2099:
+                    erlaubt.add(_norm_jahr(jahr_als_wort(int(stueck))))
+        if erlaubt:
+            for gesprochen in _jahre_im_text(voll):
+                if _norm_jahr(gesprochen) not in erlaubt:
+                    verstoesse.append(
+                        f"'{gesprochen}' kommt in den belegten Fakten nicht vor. "
+                        f"Belegt sind: {', '.join(sorted(erlaubt))}. Schreibe die "
+                        f"Jahreszahl genau so aus.")
+
     if not texts[-1].rstrip().endswith("Folge für Börse, die man versteht!"):
         verstoesse.append("Das letzte Segment endet nicht mit dem festen Abbinder.")
 
@@ -178,7 +245,10 @@ def check_script_rules(texts: list[str]) -> list[str]:
 
 def _write_script(llm: LLMProvider, research: Research,
                   target_seconds: int) -> dict | None:
-    words = int(target_seconds * 2.3)
+    # 1,95 statt 2,3 Woerter/Sekunde: gemessen an Reel #108 (104 Woerter -> 53,4 s).
+    # Ausgeschriebene Zahlwoerter brauchen deutlich laenger als normale Woerter, und
+    # dieser Kanal schreibt jede Zahl aus.
+    words = int(target_seconds * 1.95)
     user = (
         f"Thema: {research.topic}\n"
         f"Aufhänger: {research.why_now}\n"
@@ -200,7 +270,7 @@ def _write_script(llm: LLMProvider, research: Research,
 
     # Einmal nachbessern lassen. Zweimal lohnt nicht: wer die Regeln nach einer
     # konkreten Ruege nicht einhaelt, haelt sie auch beim dritten Mal nicht ein.
-    verstoesse = check_script_rules([str(s) for s in data["segments"]])
+    verstoesse = check_script_rules([str(s) for s in data["segments"]], research.facts)
     if verstoesse:
         logger.warning("Skript verletzt Sprechregeln, fordere Korrektur an: "
                        + " | ".join(verstoesse))
@@ -216,7 +286,8 @@ def _write_script(llm: LLMProvider, research: Research,
             purpose="auto_reel_script_fix",
         ))
         if isinstance(korrektur, dict) and korrektur.get("segments"):
-            rest = check_script_rules([str(s) for s in korrektur["segments"]])
+            rest = check_script_rules([str(s) for s in korrektur["segments"]],
+                                      research.facts)
             if len(rest) < len(verstoesse):
                 if rest:
                     logger.warning("Nach Korrektur noch offen: " + " | ".join(rest))

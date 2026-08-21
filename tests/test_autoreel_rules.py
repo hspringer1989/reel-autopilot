@@ -10,7 +10,8 @@ import pytest
 
 import datetime as dt
 
-from src.content.autoreel import check_script_rules, ist_vorschautag
+from src.content.autoreel import (check_script_rules, ist_vorschautag,
+                                  jahr_als_wort)
 
 _ABBINDER = "Folge für Börse, die man versteht!"
 
@@ -91,3 +92,42 @@ class TestWochenvorschau:
                 assert tag.strftime("%A") == "Saturday", tag
             tag += dt.timedelta(days=1)
         assert samstage == 52, samstage
+
+
+class TestJahreszahlen:
+    """Vorfall 21.08.2026, Reel #108: Die Regelpruefung verlangte Zahlen als Woerter,
+    und beim Ausschreiben wurde aus 2026 zweimal "zweitausendundzwanzig". Die Form war
+    danach regelkonform, das Jahr falsch — die unangenehmste Fehlerklasse, weil eine
+    Korrektur eine Tatsache kaputtmacht."""
+
+    _FAKTEN = ["Fed-Sitzung am 29.07.2026 mit drei Gegenstimmen",
+               "30-jaehrige US-Rendite am 18.08.2026 bei 5,3 Prozent"]
+
+    def _mit(self, satz: str) -> list[str]:
+        return check_script_rules([f"{satz} {_ABBINDER}"], self._FAKTEN)
+
+    def test_falsches_jahr_wird_gefangen(self):
+        v = self._mit("Das war am neunundzwanzigsten Juli zweitausendundzwanzig.")
+        assert any("zweitausendundzwanzig" in x for x in v), v
+
+    def test_richtiges_jahr_geht_durch(self):
+        assert self._mit("Das war am neunundzwanzigsten Juli "
+                         "zweitausendsechsundzwanzig.") == []
+
+    def test_schreibvariante_mit_und_geht_durch(self):
+        """Dieselbe Zahl, andere Schreibweise — kein Fehlalarm."""
+        assert self._mit("Das war am neunundzwanzigsten Juli "
+                         "zweitausendundsechsundzwanzig.") == []
+
+    def test_ohne_fakten_keine_jahrespruefung(self):
+        """Wer keine Fakten mitgibt, bekommt keine falschen Vorwuerfe."""
+        v = check_script_rules([f"Im Jahr zweitausendzwanzig war alles anders. {_ABBINDER}"])
+        assert not any("zweitausend" in x for x in v), v
+
+    @pytest.mark.parametrize("jahr,wort", [
+        (2000, "zweitausend"), (2008, "zweitausendacht"), (2011, "zweitausendelf"),
+        (2020, "zweitausendzwanzig"), (2024, "zweitausendvierundzwanzig"),
+        (2026, "zweitausendsechsundzwanzig"), (2030, "zweitausenddreißig"),
+    ])
+    def test_jahr_als_wort(self, jahr, wort):
+        assert jahr_als_wort(jahr) == wort
