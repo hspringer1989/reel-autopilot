@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+body { margin: 0; background: #dedbd4; }
+a { color: #0a7dd4; } a:hover { color: #075ea0; }
+</style>
+</helmet>
+<section style="padding: 56px; font-family: 'Archivo', system-ui, sans-serif;">
+  <div id="story-milestone2" style="width: 1080px; height: 1920px; position: relative; overflow: hidden; background: #0c1512; display: flex; flex-direction: column;">
+
+    <!-- Glow, Radar-Ringe, Konfetti -->
+    <div style="position: absolute; inset: 0;">{{ buehne }}</div>
+
+    <div style="height: 170px; flex: none;"></div>
+
+    <!-- Kopf -->
+    <div style="position: relative; padding: 6px 68px 0; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="position: relative; width: 50px; height: 50px; flex: none;">
+          <div style="position: absolute; inset: 0; border: 4px solid #fff; border-radius: 50%; opacity: 0.3;"></div>
+          <div style="position: absolute; inset: 13px; border: 4px solid #fff; border-radius: 50%; opacity: 0.55;"></div>
+          <div style="position: absolute; top: 5px; right: 5px; width: 14px; height: 14px; background: {{ accent }}; border-radius: 50%;"></div>
+        </div>
+        <div style="font-weight: 900; font-size: 27px; letter-spacing: 0.03em; color: #fff;">RENDITE RADAR</div>
+      </div>
+      <div style="font-weight: 800; font-size: 21px; letter-spacing: 0.16em; color: {{ accent }}; border: 2px solid {{ accent }}; padding: 9px 18px; border-radius: 999px;">MEILENSTEIN</div>
+    </div>
+
+    <!-- Hero: die Zahl -->
+    <div style="position: relative; padding: 74px 68px 0; display: flex; flex-direction: column; align-items: center; text-align: center;">
+      <div contenteditable="true" style="font-weight: 800; font-size: 30px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(255,255,255,0.5);">Geknackt</div>
+
+      <div style="position: relative; margin-top: 18px; display: flex; align-items: center; justify-content: center;">
+        <div aria-hidden="true" style="position: absolute; font-weight: 900; font-size: 300px; line-height: 0.8; letter-spacing: -0.05em; color: transparent; -webkit-text-stroke: 3px rgba(255,255,255,0.16); transform: translate(14px, 14px);">{{ zahl }}</div>
+        <div contenteditable="true" style="position: relative; font-weight: 900; font-size: 300px; line-height: 0.8; letter-spacing: -0.05em; color: #fff;">{{ zahl }}</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 22px; margin-top: 34px;">
+        <span style="width: 70px; height: 4px; background: {{ accent }}; border-radius: 2px;"></span>
+        <span contenteditable="true" style="font-weight: 900; font-size: 60px; line-height: 1; letter-spacing: 0.06em; color: {{ accent }};">FOLLOWER</span>
+        <span style="width: 70px; height: 4px; background: {{ accent }}; border-radius: 2px;"></span>
+      </div>
+    </div>
+
+    <!-- Dank -->
+    <div style="position: relative; padding: 66px 68px 0; text-align: center;">
+      <div contenteditable="true" style="font-weight: 900; font-size: 78px; line-height: 1.02; letter-spacing: -0.025em; color: #fff;">Ihr seid die Besten!</div>
+      <p contenteditable="true" style="margin: 22px 0 0; font-weight: 600; font-size: 30px; line-height: 1.45; color: rgba(255,255,255,0.68); text-wrap: pretty;">Danke für euer Vertrauen, jedes Like und jede Nachricht.<br>Ihr macht Rendite Radar zu dem, was es ist.</p>
+    </div>
+
+    <div style="position: relative; height: 44px; flex: none;"></div>
+
+    <!-- Nächstes Ziel -->
+    <div style="position: relative; margin: 0 68px; background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 34px 38px;">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px;">
+        <div style="font-weight: 800; font-size: 24px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.5);">Nächstes Ziel</div>
+        <div contenteditable="true" style="font-weight: 900; font-size: 54px; line-height: 1; color: {{ accent }};">{{ zielZahl }}</div>
+      </div>
+      <div style="position: relative; height: 26px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden;">
+        <div style="position: absolute; left: 0; top: 0; bottom: 0; width: {{ progressWidth }}; border-radius: 999px; background: {{ accent }};"></div>
+      </div>
+      <div contenteditable="true" style="margin-top: 16px; font-weight: 800; font-size: 26px; color: #fff;">Nur noch {{ fehlende }} bis {{ zielZahl }} – das schaffen wir!</div>
+    </div>
+
+    <!-- Call to Action -->
+    <div style="position: relative; margin: 22px 68px 0; background: {{ accent }}; border-radius: 30px; padding: 34px 38px; display: flex; align-items: center; gap: 28px;">
+      <div style="flex: none; width: 84px; height: 84px; border-radius: 24px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;">{{ shareIcon }}</div>
+      <div style="flex: 1;">
+        <div contenteditable="true" style="font-weight: 900; font-size: 42px; line-height: 1.08; color: #fff;">Teilt diese Story!</div>
+        <p contenteditable="true" style="margin: 8px 0 0; font-weight: 600; font-size: 26px; line-height: 1.38; color: rgba(255,255,255,0.9); text-wrap: pretty;">Sendet den Kanal an jemanden, der Aktienanalysen liebt.</p>
+      </div>
+    </div>
+
+    <div style="position: relative; flex: 1;"></div>
+    <div style="position: relative; padding: 26px 68px 46px; display: flex; align-items: center; justify-content: space-between;">
+      <div contenteditable="true" style="font-weight: 600; font-size: 22px; color: rgba(255,255,255,0.4);">Keine Anlageberatung · Danke fürs Dabeisein</div>
+      <div style="font-weight: 700; font-size: 22px; color: rgba(255,255,255,0.5);">@rendite.radar.official</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1192px&quot;,&quot;height&quot;:&quot;2032px&quot;},&quot;meilenstein&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1000,&quot;min&quot;:50,&quot;max&quot;:1000000,&quot;step&quot;:50,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Meilenstein&quot;},&quot;naechstesZiel&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:2000,&quot;min&quot;:100,&quot;max&quot;:2000000,&quot;step&quot;:50,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Meilenstein&quot;},&quot;aktuellerStand&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1000,&quot;min&quot;:0,&quot;max&quot;:2000000,&quot;step&quot;:10,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Meilenstein&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#0a7dd4&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#0a7dd4&quot;,&quot;#0a9d5f&quot;,&quot;#c9a227&quot;,&quot;#e0641e&quot;],&quot;section&quot;:&quot;Farben&quot;}}">
+class Component extends DCLogic {
+  fmt(n) { return Number(n).toLocaleString('de-DE'); }
+
+  renderVals() {
+    const accent = this.props.accentColor ?? '#0a7dd4';
+    const meilenstein = this.props.meilenstein ?? 1000;
+    const naechstesZiel = this.props.naechstesZiel ?? meilenstein * 2;
+    const aktuell = this.props.aktuellerStand ?? meilenstein;
+    const pct = Math.max(5, Math.min(100, Math.round(aktuell / naechstesZiel * 100)));
+
+    const W = 1080, H = 1920;
+    const cx = W / 2, cy = 700;
+
+    // Radar-Ringe um die Zahl + Glow + Konfetti + Kurve unten
+    const rings = [230, 340, 460, 590, 730].map((r, i) =>
+      React.createElement('circle', { key: 'r' + i, cx, cy, r, fill: 'none', stroke: '#fff', strokeWidth: 2.5, opacity: 0.09 - i * 0.012 })
+    );
+
+    // Konfetti: Punkte, Quadrate, Pluszeichen — feste Streuung
+    const conf = [
+      [120, 380, 'sq', 22, 12], [960, 430, 'dot', 14, 0], [180, 620, 'plus', 26, -18],
+      [925, 660, 'sq', 18, -8], [90, 900, 'dot', 11, 0], [995, 950, 'plus', 22, 14],
+      [150, 1120, 'sq', 16, 24], [935, 1160, 'dot', 13, 0], [250, 300, 'dot', 9, 0],
+      [830, 320, 'sq', 13, -14], [60, 520, 'plus', 18, 8], [1010, 560, 'sq', 15, 20],
+      [300, 1215, 'plus', 20, -10], [790, 1240, 'dot', 10, 0]
+    ];
+    const confetti = conf.map((c, i) => {
+      const [x, y, kind, s, rot] = c;
+      const col = i % 3 === 0 ? accent : '#fff';
+      const op = i % 3 === 0 ? 0.65 : 0.3;
+      if (kind === 'dot') return React.createElement('circle', { key: 'c' + i, cx: x, cy: y, r: s, fill: col, opacity: op });
+      if (kind === 'sq') return React.createElement('rect', { key: 'c' + i, x: x - s, y: y - s, width: s * 2, height: s * 2, rx: 4, fill: col, opacity: op, transform: `rotate(${rot} ${x} ${y})` });
+      return React.createElement('g', { key: 'c' + i, transform: `rotate(${rot} ${x} ${y})`, stroke: col, strokeWidth: 6, opacity: op, strokeLinecap: 'round' },
+        React.createElement('line', { x1: x - s, y1: y, x2: x + s, y2: y }),
+        React.createElement('line', { x1: x, y1: y - s, x2: x, y2: y + s })
+      );
+    });
+
+    const pts = [[-40, 1830], [190, 1755], [400, 1805], [640, 1680], [850, 1730], [1120, 1590]];
+    const line = pts.map(p => p.join(',')).join(' ');
+
+    const buehne = React.createElement('svg', { width: '100%', height: '100%', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', key: 'b' },
+      React.createElement('defs', null,
+        React.createElement('radialGradient', { id: 'glow', cx: '50%', cy: '36%', r: '55%' },
+          React.createElement('stop', { offset: '0%', stopColor: accent, stopOpacity: 0.42 }),
+          React.createElement('stop', { offset: '60%', stopColor: accent, stopOpacity: 0.08 }),
+          React.createElement('stop', { offset: '100%', stopColor: accent, stopOpacity: 0 }))),
+      React.createElement('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#glow)' }),
+      rings,
+      confetti,
+      React.createElement('polygon', { points: `0,${H} ${line} ${W},${H}`, fill: accent, opacity: 0.14 }),
+      React.createElement('polyline', { points: line, fill: 'none', stroke: accent, strokeWidth: 9, strokeLinejoin: 'round', strokeLinecap: 'round', opacity: 0.5 })
+    );
+
+    const shareIcon = React.createElement('svg', { width: 44, height: 44, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round', key: 'si' },
+      React.createElement('path', { d: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7' }),
+      React.createElement('path', { d: 'M12 16V3' }),
+      React.createElement('path', { d: 'M7 8l5-5 5 5' })
+    );
+
+    return {
+      accent, buehne, shareIcon,
+      zahl: this.fmt(meilenstein),
+      zielZahl: this.fmt(naechstesZiel),
+      fehlende: this.fmt(Math.max(0, naechstesZiel - aktuell)),
+      progressWidth: pct + '%'
+    };
+  }
+}
+</script>
+</body>
+</html>
