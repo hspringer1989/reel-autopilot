@@ -63,11 +63,15 @@ class ClaudeProvider(LLMProvider):
         return message.content[0].text
 
 
-    # Der Client-Timeout (120 s) ist fuer normale Textcalls gedacht. Ein Recherche-Call
-    # fuehrt bis zu sechs Websuchen serverseitig aus, bevor das erste Token kommt, und
-    # reisst die 120 s zuverlaessig — im Livetest am 20.08.2026 dreimal hintereinander
-    # bis zum APITimeoutError. Deshalb hier ein eigenes Zeitbudget.
-    RESEARCH_TIMEOUT_S = 600.0
+    # Der Client-Timeout (120 s) ist fuer normale Textcalls gedacht und fuer einen
+    # Recherche-Call zu knapp: der fuehrt die Websuchen serverseitig aus, bevor das
+    # erste Token kommt.
+    #
+    # Aber grosszuegig darf er auch nicht sein. Mit 600 s hing die Abend-Automatik am
+    # 20.08.2026 ueber 40 Minuten in einem gedrosselten Aufruf. Ein Reel, das um 19:05
+    # fertig ist, ist mehr wert als eines, das um 19:45 vielleicht kommt — reisst die
+    # Recherche dieses Budget, faellt die Automatik lieber sofort auf den RSS-Pfad.
+    RESEARCH_TIMEOUT_S = 180.0
 
     def research(self, system: str, user: str, model: str, max_tokens: int,
                  purpose: str, max_searches: int = 6) -> str:
@@ -80,7 +84,12 @@ class ClaudeProvider(LLMProvider):
         obwohl der Server noch arbeitet."""
         if usage.claude_budget_exceeded():
             raise BudgetExceeded("Claude-Tagesbudget erschöpft")
-        client = self._client.with_options(timeout=self.RESEARCH_TIMEOUT_S)
+        # max_retries=0: der Client wiederholt sonst zweimal, aus 180 s werden
+        # dann 9 Minuten. Genau das hat die Automatik am 20.08.2026 haengen
+        # lassen. Ein Fehlschlag soll hier SCHNELL passieren, damit der
+        # RSS-Pfad noch rechtzeitig uebernehmen kann.
+        client = self._client.with_options(
+            timeout=self.RESEARCH_TIMEOUT_S, max_retries=0)
         with client.messages.stream(
             model=model,
             max_tokens=max_tokens,

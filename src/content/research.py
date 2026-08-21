@@ -62,13 +62,25 @@ ungenutztem Depot).
 Du recherchierst mit Websuche und schlägst GENAU EIN Thema für das Reel von morgen
 früh vor. Prüfe mehrere Kandidaten, bevor du dich entscheidest.
 
-Antworte ausschließlich mit diesem JSON, ohne Vorrede:
+Belege jeden Fakt SOFORT, solange du suchst: zu jedem Fakt gehört in "evidence" ein
+wörtliches Zitat aus der Quelle, das genau die genannte Zahl enthält. Es gibt keinen
+zweiten Suchlauf — was du hier nicht belegst, wird verworfen. Lieber drei wasserdichte
+Fakten als sechs halbgare.
+
+Beginne die Antwort unmittelbar mit der geschweiften Klammer. Keine Vorrede, kein
+Kommentar, kein Text danach. Meldet die Websuche ein Limit, ist das KEIN Grund, die
+Antwort abzubrechen — gib dann das JSON aus dem aus, was du bereits belegt hast, und
+nimm lieber weniger Fakten auf.
+
+Antworte ausschließlich mit diesem JSON:
 {{
   "topic": "kurzer Themenzuschnitt, kein Firmenname als Hauptsache",
   "title": "Arbeitstitel für die Ankündigungs-Story",
   "why_now": "welches abgeschlossene Ereignis der Aufhänger ist, mit Datum",
   "loudness": "warum das im Mainstream läuft und nicht nur im Wirtschaftsteil",
   "facts": ["je ein belegter Fakt mit Zahl und Datum", "..."],
+  "evidence": {{"exakt derselbe Fakt-Text wie oben":
+                "Quelle + Datum + WÖRTLICHES Zitat, das genau diese Zahl trägt"}},
   "aha": "der überraschende Schlussgedanke, der die naheliegende Deutung dreht",
   "relevance": "was das für das Geld/den Alltag eines Normalverdieners heißt",
   "sources": ["Quellenname oder URL", "..."],
@@ -76,16 +88,20 @@ Antworte ausschließlich mit diesem JSON, ohne Vorrede:
 }}"""
 
 _VERIFY_SYSTEM = """Du bist Faktenprüfer für einen Finanz-Kanal. Du bekommst eine
-Liste behaupteter Fakten und prüfst JEDEN einzeln mit Websuche.
+Liste behaupteter Fakten, die BEREITS recherchiert wurden und jeweils Quelle und
+wörtliches Zitat mitbringen.
 
-Sei streng. Häufige Fehler, auf die du besonders achtest:
-- Kurse und Rohstoffpreise streuen zwischen Quellen. Immer zweitquelle suchen.
-  Bei Rohstoffen englischsprachig suchen, deutsche Quellen sind oft ungenau.
-- Wochenvorschauen datieren Termine regelmäßig falsch. Wochentag gegen das
-  Kalenderdatum prüfen.
-- Zahlen, deren Veröffentlichung noch aussteht, kursieren teils schon als
-  vermeintliche Ergebnisse. Solche Fakten immer verwerfen.
-- Leitzinsen und Ähnliches: Ratgeberseiten schleppen alte Stände monatelang mit.
+Du suchst NICHT. Deine Aufgabe ist die Prüfung am mitgelieferten Beleg — genau deshalb
+verlangt der erste Schritt Zitate. (Ein zweiter Suchlauf direkt nach dem ersten läuft
+ins Websuch-Ratenlimit und blockiert die Automatik minutenlang; gemessen 20.08.2026.)
+
+Verwirf einen Fakt, wenn eines davon zutrifft:
+- Es fehlt Quelle oder Zitat, oder das Zitat trägt die Behauptung nicht.
+- Die Zahl im Fakt steht so nicht im Zitat, sondern ist daraus abgeleitet oder gerundet
+  über das hinaus, was das Zitat hergibt.
+- Datum und Wochentag passen nicht zusammen, oder das Datum liegt in der Zukunft.
+- Es riecht nach einer Zahl, deren Veröffentlichung noch aussteht.
+- Zwei Fakten widersprechen sich zahlenmäßig.
 
 Antworte ausschließlich mit diesem JSON:
 {
@@ -148,6 +164,42 @@ die Websuche ein Limit, gib trotzdem das JSON aus dem aus, was du schon hast.
   "sources": ["Quellenname oder URL", "..."],
   "rejected": []
 }"""
+
+
+def _verify_facts(llm: LLMProvider, data: dict, day_label: str) -> dict | None:
+    """Zweiter Pass: die Fakten gegen die mitgelieferten Belege pruefen — OHNE Websuche.
+
+    Das ist der Kern der Beschleunigung. Frueher suchte dieser Pass erneut und lief
+    dabei ins Ratenlimit des ersten Passes: gemessen am 20.08.2026 ueber 22 Minuten
+    ohne Ergebnis, waehrend der erste Pass nur 2:20 brauchte. Geprueft wird jetzt an
+    dem woertlichen Zitat, das der erste Pass ohnehin liefern muss.
+    """
+    belege = data.get("evidence") or {}
+    zeilen = []
+    for f in data["facts"]:
+        beleg = belege.get(f) if isinstance(belege, dict) else None
+        zeilen.append(f"- {f}")
+        if beleg:
+            zeilen.append(f"    Beleg: {beleg}")
+    quellen = "; ".join(str(q) for q in (data.get("sources") or [])[:6])
+    kopf = f"Thema: {data['topic']}"
+    user = chr(10).join([kopf, f"Stand: {day_label}", "",
+                      "Zu pruefende Fakten mit Belegen:", *zeilen, "",
+                      f"Quellen des ersten Durchgangs: {quellen}"])
+
+    try:
+        raw = llm.complete(          # complete(), nicht research(): keine Websuche
+            system=_VERIFY_SYSTEM,
+            user=user,
+            model=config.CLAUDE_MODEL,
+            max_tokens=2000,
+            purpose="reel_fact_verify",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Faktencheck fehlgeschlagen: {exc}")
+        return None
+    checked = parse_json_response(raw)
+    return checked if isinstance(checked, dict) else None
 
 
 def research_week_ahead(llm: LLMProvider, day_label: str) -> Research:
@@ -219,9 +271,11 @@ def research_topic(llm: LLMProvider, day_label: str,
               f"Recherchiere die aktuelle Nachrichtenlage und schlage das Thema vor."
               + recent_block),
         model=config.CLAUDE_MODEL,
-        max_tokens=2500,
+        # Grosszuegig: die woertlichen Zitate in "evidence" machen die Antwort lang.
+        # Mit 2500 brach das JSON mitten im Schreiben ab (20.08.2026).
+        max_tokens=8000,
         purpose="reel_topic_research",
-        max_searches=8,
+        max_searches=5,     # acht Suchen reissen das Kontingent des Kontos
     )
     data = parse_json_response(raw)
     if not isinstance(data, dict) or not data.get("topic") or not data.get("facts"):
@@ -232,16 +286,7 @@ def research_topic(llm: LLMProvider, day_label: str,
     if data.get("rejected"):
         logger.info(f"Verworfen: {'; '.join(str(x) for x in data['rejected'][:3])}")
 
-    checked = parse_json_response(llm.research(
-        system=_VERIFY_SYSTEM,
-        user=(f"Thema: {data['topic']}\nStand: {day_label}\n\n"
-              f"Zu prüfende Fakten:\n"
-              + "\n".join(f"- {f}" for f in data["facts"])),
-        model=config.CLAUDE_MODEL,
-        max_tokens=2000,
-        purpose="reel_fact_verify",
-        max_searches=8,
-    ))
+    checked = _verify_facts(llm, data, day_label)
     if not isinstance(checked, dict):
         logger.warning("Faktencheck lieferte kein brauchbares JSON — Thema verworfen")
         return Research(ok=False, note="Faktencheck ohne verwertbares Ergebnis")
