@@ -60,9 +60,33 @@ INHALT
 - Bei Zeitbezügen das konkrete Datum nennen.
 - Das letzte Segment enthält das Aha und endet mit "Folge für Börse, die man versteht!"
 
+BILDER
+- Zu jedem Segment AUSSER dem ersten gehört ein Frame-Bauplan. Das erste Segment liegt
+  auf dem Startvideo.
+- Der Frame zeigt die ZAHLEN, über die das Segment spricht. Gesprochene Zahlen behält
+  niemand, gelesene schon. Ein Frame ohne Zahl ist ein verschenkter Frame.
+- Drei Formen stehen zur Verfügung:
+    "rows"    Kennzahlen untereinander, je Zeile ein Label und ein Wert.
+              Für "hier sind die Fakten".
+    "compare" Zwei Größen nebeneinander, genau zwei Zeilen. Für "X gegen Y".
+              Die ZWEITE ist die hervorgehobene.
+    "steps"   Drei bis vier Stationen einer Kette. Für "erst A, dann B, am Ende C".
+- Label kurz halten (höchstens rund 30 Zeichen), Werte noch kürzer. Zahlen hier als
+  ZIFFERN, nicht als Wörter — das ist der Unterschied zum Sprechtext.
+- "accent": blue neutral, green positiv, amber Warnung/offen, red negativ.
+- "highlight" ist optional: EINE große Zahl über dem Inhalt, wenn das Segment sich um
+  genau eine Zahl dreht.
+
 Antworte ausschließlich mit diesem JSON:
 {"title": "Titel für die Ankündigungs-Story",
  "segments": ["Segment 1", "Segment 2", "..."],
+ "frames": [{"kind": "rows|compare|steps",
+             "kicker": "KURZE ÜBERSCHRIFT IN GROSSBUCHSTABEN",
+             "title": "knappe Bildüberschrift",
+             "accent": "blue|green|amber|red",
+             "rows": [["Label", "Wert"], ["...", "..."]],
+             "highlight": "", "highlight_sub": "",
+             "note_head": "", "note_text": ""}],
  "caption": "Instagram-Caption mit Zahlen, Quellen und Disclaimer",
  "opener_queries": ["englische Pexels-Suchbegriffe für ein helles, thematisch
    passendes Startbild mit klarem Motiv", "..."]}"""
@@ -243,6 +267,47 @@ def check_script_rules(texts: list[str], facts: list[str] | None = None) -> list
     return verstoesse
 
 
+def _frames_bauen(daten: dict, anzahl: int, reel_id: int) -> list[str | None]:
+    """Aus den Bauplänen des Skripts die Frames zeichnen.
+
+    Fehlt ein Bauplan oder ist er unbrauchbar, steht an dieser Stelle None — dann legt
+    der Renderer wie bisher einen Farbverlauf dahinter. Ein fehlender Frame ist ein
+    Schönheitsfehler, ein Absturz kostet das ganze Reel.
+    """
+    from src.render.data_frames import FrameSpec, render_data_frame
+
+    baup = daten.get("frames") or []
+    out: list[str | None] = []
+    for i in range(anzahl):
+        roh = baup[i] if i < len(baup) and isinstance(baup[i], dict) else None
+        if not roh:
+            out.append(None)
+            continue
+        try:
+            zeilen = [(str(r[0]), str(r[1])) for r in (roh.get("rows") or [])
+                      if isinstance(r, (list, tuple)) and len(r) >= 2]
+            spec = FrameSpec(
+                kind=str(roh.get("kind") or "rows"),
+                kicker=str(roh.get("kicker") or "")[:34],
+                title=str(roh.get("title") or ""),
+                accent=str(roh.get("accent") or "blue"),
+                rows=zeilen,
+                highlight=str(roh.get("highlight") or ""),
+                highlight_sub=str(roh.get("highlight_sub") or ""),
+                note_head=str(roh.get("note_head") or ""),
+                note_text=str(roh.get("note_text") or ""),
+            )
+            if not spec.rows and not spec.highlight:
+                out.append(None)          # ein Frame ohne Zahl bringt nichts
+                continue
+            pfad = str(Path(config.OUTPUT_DIR) / f"frame_{reel_id}_{i + 1}.jpg")
+            out.append(render_data_frame(spec, pfad))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Frame {i + 1} nicht zeichenbar ({exc}) — Farbverlauf")
+            out.append(None)
+    return out
+
+
 def _write_script(llm: LLMProvider, research: Research,
                   target_seconds: int) -> dict | None:
     # 1,95 statt 2,3 Woerter/Sekunde: gemessen an Reel #108 (104 Woerter -> 53,4 s).
@@ -357,10 +422,12 @@ async def generate_autonomous_reel(target_seconds: int = 40) -> AutoReel:
     base = Path(config.OUTPUT_DIR) / f"reel_{reel_id}_{stamp}"
     tts = get_tts().synthesize(script.full_text, base.with_suffix(".mp3"))
 
-    # Ein B-Roll-Eintrag je Segment: Opener zuerst, danach der Rest als Farbverlauf.
-    # Gezeichnete Datenframes wie in der Handarbeit kann dieser Pfad noch nicht —
-    # siehe Hinweis in der PR-Beschreibung.
-    broll = [choice.path] + [None] * (len(texts) - 1)
+    # Ein B-Roll-Eintrag je Segment: Opener zuerst, danach gezeichnete Datenframes.
+    # Wo kein Bauplan kam, bleibt None und der Renderer legt einen Farbverlauf.
+    frames = _frames_bauen(script_data, len(texts) - 1, reel_id)
+    broll = [choice.path] + frames
+    gezeichnet = sum(1 for f in frames if f)
+    logger.info(f"{gezeichnet} von {len(frames)} Datenframes gezeichnet")
     video = render_reel(script, tts, broll, base.with_suffix(".mp4"), pick_music())
 
     with session_scope() as session:
