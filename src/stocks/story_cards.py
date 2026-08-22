@@ -768,82 +768,261 @@ def render_candidates_overview_card(candidates: list[Candidate], out_path: str) 
 def _de_num(n: int) -> str:
     return f"{n:,}".replace(",", ".")
 
+# ── Follower-milestone story — Claude-Design "Story-Milestone v2" ──────────
+# High-fidelity rebuild of the design handoff: near-black stage, elliptical
+# accent glow, radar rings, fixed confetti, an offset outline copy of the big
+# number, progress card and share CTA. Canvas 1080×1920, 68 px side margin,
+# 170 px Instagram safe zone at the top.
+# Only the ACCENT is channel-specific (PROFILE.MILESTONE_ACCENT, default: the
+# palette blue) — the near-black stage and the layout are brand-neutral.
+_MS_PAGE = (12, 21, 18)                       # #0c1512 stage
+_MS_CENTER = (540, 700)                       # radar-ring centre
+_MS_RINGS = (230, 340, 460, 590, 730)
+# 14 fixed confetti shapes (x, y, kind, size, rotation) — no randomness, so the
+# same milestone always exports identically
+_MS_CONFETTI = (
+    (120, 380, "sq", 22, 12), (960, 430, "dot", 14, 0), (180, 620, "plus", 26, -18),
+    (925, 660, "sq", 18, -8), (90, 900, "dot", 11, 0), (995, 950, "plus", 22, 14),
+    (150, 1120, "sq", 16, 24), (935, 1160, "dot", 13, 0), (250, 300, "dot", 9, 0),
+    (830, 320, "sq", 13, -14), (60, 520, "plus", 18, 8), (1010, 560, "sq", 15, 20),
+    (300, 1215, "plus", 20, -10), (790, 1240, "dot", 10, 0),
+)
+_MS_CURVE = ((-40, 1830), (190, 1755), (400, 1805), (640, 1680), (850, 1730), (1120, 1590))
+_MS_SHARE_HINT = "Sendet den Kanal an jemanden, der neue Beiträge mag."
 
-def render_milestone_story(milestone: int, next_milestone: int, out_path: str) -> str:
-    """Follower-milestone thank-you card in the light template design: big number,
-    progress bar towards the next goal, share prompt. All numbers are dynamic so
-    the same card works for 100, 200, 1.000 … followers."""
+
+def _ms_font(size: int, weight: int = 700):
+    return branding.load_weighted_font(size, weight)
+
+
+def _ms_accent():
+    """Accent of the milestone card. The design ships four approved accents, so
+    a channel may override the palette blue via PROFILE.MILESTONE_ACCENT."""
+    raw = getattr(config.PROFILE, "MILESTONE_ACCENT", None)
+    if isinstance(raw, str) and len(raw) == 7 and raw.startswith("#"):
+        return tuple(int(raw[i:i + 2], 16) for i in (1, 3, 5))
+    if isinstance(raw, (tuple, list)) and len(raw) == 3:
+        return tuple(int(v) for v in raw)
+    return _BRAND
+
+
+def _wa(alpha: float) -> tuple:
+    """White at `alpha` — the design expresses every tint as rgba(255,255,255,x)."""
+    return (255, 255, 255, int(round(alpha * 255)))
+
+
+def _tracked_w(draw, text: str, font, tracking: float) -> float:
+    """Advance width of `text` with CSS letter-spacing — which adds the spacing
+    after EVERY character, including the last. That trailing gap is what shifts
+    centred tracked text off the optical middle in the design reference, so we
+    reproduce it instead of centring the ink."""
+    return sum(draw.textlength(c, font=font) for c in text) + tracking * len(text)
+
+
+def _ink_y(font, text: str, ink_top: float) -> float:
+    """Draw-y at which the VISIBLE ink of `text` starts exactly at `ink_top`.
+    Anchoring on ink (not on the ascender box) is what makes the rebuild line up
+    with the design reference regardless of the font's internal metrics."""
+    return ink_top - font.getbbox(text)[1]
+
+
+def _tracked(draw, x: float, y: float, text: str, font, fill, tracking: float = 0.0) -> float:
+    for ch in text:
+        draw.text((x, y), ch, font=font, fill=fill)
+        x += draw.textlength(ch, font=font) + tracking
+    return x
+
+
+def _tracked_center(draw, text: str, font, ink_top: float, fill, tracking: float = 0.0) -> None:
+    w = _tracked_w(draw, text, font, tracking)
+    _tracked(draw, (W - w) / 2, _ink_y(font, text, ink_top), text, font, fill, tracking)
+
+
+def _ms_stage(accent):
+    """Near-black page + the elliptical accent glow (radialGradient cx 50 %,
+    cy 36 %, r 55 %; accent .42 -> .08 at 60 % -> 0). Drawn as nested opaque
+    ellipses from the outside in, so nothing alpha-stacks."""
     from PIL import Image, ImageDraw
 
-    img = Image.new("RGB", (W, H), _LT_BG)
+    img = Image.new("RGB", (W, H), _MS_PAGE)
     draw = ImageDraw.Draw(img)
-    _brandmark(draw, 60, 172)
-    _pill_right(draw, W - 56, 170, "MEILENSTEIN", _BRAND, (255, 255, 255), 28)
+    cx, cy, rx, ry = W / 2, H * 0.36, W * 0.55, H * 0.55
+    steps = 400
+    for i in range(steps, 0, -1):
+        t = i / steps
+        op = (0.42 + (0.08 - 0.42) * (t / 0.6)) if t <= 0.6 else 0.08 * (1 - (t - 0.6) / 0.4)
+        col = tuple(int(round(_MS_PAGE[k] + (accent[k] - _MS_PAGE[k]) * op)) for k in range(3))
+        draw.ellipse((cx - rx * t, cy - ry * t, cx + rx * t, cy + ry * t), fill=col)
+    return img
 
-    # confetti accents around the headline block
-    for x, y, r, col in ((150, 430, 10, _BRAND), (935, 400, 8, _LT_GREY),
-                         (115, 690, 8, _LT_GREY), (955, 655, 10, _BRAND)):
-        draw.ellipse((x - r, y - r, x + r, y + r), fill=col)
-    for x, y, col in ((220, 610, _LT_GREY), (870, 520, _BRAND)):
-        draw.line((x - 14, y, x + 14, y), fill=col, width=6)
-        draw.line((x, y - 14, x, y + 14), fill=col, width=6)
 
-    _center(draw, " ".join("WIR HABEN ES GESCHAFFT"), _font(30, bold=True), 316, _LT_GREY)
+def _ms_confetti(layer, accent) -> None:
+    from PIL import Image, ImageDraw
 
-    num = _de_num(milestone)
-    nf, pf = _font(290, bold=True), _font(120, bold=True)
-    wn, wp = draw.textlength(num, font=nf), draw.textlength("+", font=pf)
-    x0 = (W - wn - wp - 10) / 2
-    draw.text((x0, 372), num, font=nf, fill=_LT_INK)
-    draw.text((x0 + wn + 10, 408), "+", font=pf, fill=_BRAND)
-    _center(draw, "Follower", _font(78, bold=True), 716, _BRAND)
+    draw = ImageDraw.Draw(layer)
+    for i, (x, y, kind, s, rot) in enumerate(_MS_CONFETTI):
+        col = accent + (166,) if i % 3 == 0 else _wa(0.30)
+        if kind == "dot":
+            draw.ellipse((x - s, y - s, x + s, y + s), fill=col)
+            continue
+        pad = s * 2 + 12
+        tile = Image.new("RGBA", (pad * 2, pad * 2), (0, 0, 0, 0))
+        td = ImageDraw.Draw(tile)
+        if kind == "sq":
+            td.rounded_rectangle((pad - s, pad - s, pad + s, pad + s), radius=4, fill=col)
+        else:  # plus
+            td.line((pad - s, pad, pad + s, pad), fill=col, width=6)
+            td.line((pad, pad - s, pad, pad + s), fill=col, width=6)
+        layer.alpha_composite(tile.rotate(rot, resample=Image.BICUBIC),
+                              (int(x - pad), int(y - pad)))
 
-    _center(draw, "Ihr seid die Besten!", _font(64, bold=True), 850, _LT_INK)
-    _center(draw, "Danke für euer Vertrauen, jedes Like und jede Nachricht.",
-            _font(34), 952, _LT_GREY)
-    _center(draw, config.PROFILE.MILESTONE_TAGLINE,
-            _font(34), 1000, _LT_GREY)
 
-    # progress card towards the next goal
-    cy = 1088
-    nxt = _de_num(next_milestone)
-    draw.rounded_rectangle((60, cy, W - 60, cy + 280), radius=28, fill=_LT_CARD)
-    draw.text((110, cy + 46), " ".join("NÄCHSTES ZIEL"), font=_font(26, bold=True), fill=_LT_GREY)
-    gf, sf = _font(60, bold=True), _font(30)
-    wg, ws = draw.textlength(nxt, font=gf), draw.textlength(" Follower", font=sf)
-    draw.text((W - 110 - wg - ws, cy + 30), nxt, font=gf, fill=_BRAND)
-    draw.text((W - 110 - ws, cy + 58), " Follower", font=sf, fill=_LT_GREY)
-    bar_y = cy + 158
-    draw.rounded_rectangle((110, bar_y, W - 110, bar_y + 24), radius=12, fill=_LT_PILL)
-    frac = max(0.06, min(1.0, milestone / max(next_milestone, 1)))
-    draw.rounded_rectangle((110, bar_y, 110 + int((W - 220) * frac), bar_y + 24),
-                           radius=12, fill=_BRAND)
-    draw.text((110, bar_y + 50), f"{num} erreicht", font=_font(26), fill=_LT_GREY)
-    rest = f"Nur noch {_de_num(next_milestone - milestone)} bis {nxt}"
-    rf = _font(26, bold=True)
-    draw.text((W - 110 - draw.textlength(rest, font=rf), bar_y + 50), rest, font=rf, fill=_LT_INK)
+def _ms_deco(img, accent):
+    """Radar rings, confetti and the bottom price curve — everything behind the
+    content, drawn once on an RGBA layer and composited."""
+    from PIL import Image, ImageDraw
 
-    # share prompt (dark card)
-    sy = 1414
-    draw.rounded_rectangle((60, sy, W - 60, sy + 250), radius=28, fill=_CHIP)
-    draw.rounded_rectangle((110, sy + 56, 194, sy + 140), radius=20, fill=_BRAND)
-    ax = 152  # share glyph: arrow up out of a tray
-    draw.line((ax, sy + 78, ax, sy + 116), fill=(255, 255, 255), width=7)
-    draw.polygon([(ax - 14, sy + 90), (ax + 14, sy + 90), (ax, sy + 68)], fill=(255, 255, 255))
-    draw.line((132, sy + 126, 172, sy + 126), fill=(255, 255, 255), width=7)
-    draw.text((232, sy + 52), "Teilt diese Story!", font=_font(44, bold=True), fill=(255, 255, 255))
-    _wrap_px(draw, "Sendet den Kanal an jemanden, der Aktienanalysen liebt – "
-             f"gemeinsam knacken wir die {nxt}.",
-             _font(30), 232, sy + 122, W - 110, (176, 184, 196), 42)
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    cx, cy = _MS_CENTER
+    for i, r in enumerate(_MS_RINGS):
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r),
+                     outline=_wa(0.09 - i * 0.012), width=3)
+    _ms_confetti(layer, accent)
+    draw.polygon([(0, H), *_MS_CURVE, (W, H)], fill=accent + (36,))
+    draw.line(list(_MS_CURVE), fill=accent + (128,), width=9, joint="curve")
+    return Image.alpha_composite(img.convert("RGBA"), layer)
 
-    # bottom chart silhouette + footer
-    pts = [(0, 1812), (150, 1768), (300, 1798), (450, 1726), (600, 1756),
-           (750, 1678), (900, 1712), (1080, 1620)]
-    draw.polygon(pts + [(W, H), (0, H)], fill=_LT_CARD)
-    draw.line(pts, fill=_BRAND, width=6)
-    draw.text((44, H - 62), config.PROFILE.MILESTONE_FOOTER,
-              font=_font(22), fill=_LT_GREY)
-    hf = _font(22, bold=True)
-    draw.text((W - 44 - draw.textlength(config.BRAND_HANDLE, font=hf), H - 63),
-              config.BRAND_HANDLE, font=hf, fill=_LT_INK)
-    return _save(img, out_path)
+
+def _ms_share_icon(draw, cx: float, cy: float) -> None:
+    """The 24x24 share glyph from the handoff, scaled to 44 px."""
+    k = 44 / 24
+
+    def p(x, y):
+        return (cx - 22 + x * k, cy - 22 + y * k)
+
+    white, w = (255, 255, 255), 5
+    draw.line([p(4, 12), p(4, 19), p(5, 20), p(19, 20), p(20, 19), p(20, 12)],
+              fill=white, width=w, joint="curve")
+    draw.line([p(12, 16), p(12, 3)], fill=white, width=w)
+    draw.line([p(7, 8), p(12, 3), p(17, 8)], fill=white, width=w, joint="curve")
+
+
+def render_milestone_story(milestone: int, next_milestone: int, out_path: str,
+                           current: int | None = None) -> str:
+    """Follower-milestone thank-you card (design: story-meilenstein.png).
+    `current` is the real follower count driving the progress bar; it defaults to
+    the milestone itself. Every number is dynamic, so the same card serves 100,
+    1.000 or 100.000 followers.
+
+    Drawing order: opaque stage → decoration → panels → text. Text goes on its
+    own RGBA layer because most of it is white at 40–90 % opacity; drawing that
+    straight onto RGB would silently render it as solid white."""
+    from PIL import Image, ImageDraw
+
+    accent = _ms_accent()
+    stand = milestone if current is None else max(current, milestone)
+    num, goal = _de_num(milestone), _de_num(next_milestone)
+    missing = _de_num(max(0, next_milestone - stand))
+    pct = min(100, max(5, round(stand / max(next_milestone, 1) * 100)))
+    hint = getattr(config.PROFILE, "MILESTONE_SHARE_HINT", None) or _MS_SHARE_HINT
+
+    img = _ms_deco(_ms_stage(accent), accent)
+    m = ImageDraw.Draw(img)                     # measuring only
+
+    # ── panels: logo rings, badge outline, goal card, progress bar, CTA ────
+    badge, bf = "MEILENSTEIN", _ms_font(21, 800)
+    bx0 = 1012 - _tracked_w(m, badge, bf, 3.36) - 40
+    panels = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    pd = ImageDraw.Draw(panels)
+    pd.ellipse((68, 176, 118, 226), outline=_wa(0.30), width=4)
+    pd.ellipse((81, 189, 105, 213), outline=_wa(0.55), width=4)
+    pd.ellipse((104, 181, 118, 195), fill=accent + (255,))
+    pd.rounded_rectangle((bx0, 178, 1012, 224), radius=23, outline=accent + (255,), width=2)
+    pd.rounded_rectangle((68, 985, 1012, 1195), radius=30, fill=_wa(0.06),
+                         outline=_wa(0.10), width=2)
+    pd.rounded_rectangle((106, 1092, 974, 1118), radius=13, fill=_wa(0.10))
+    pd.rounded_rectangle((106, 1092, 106 + (974 - 106) * pct / 100, 1118), radius=13,
+                         fill=accent + (255,))
+    pd.rounded_rectangle((68, 1220, 1012, 1376), radius=30, fill=accent + (255,))
+    img = Image.alpha_composite(img, panels)
+
+    # the icon tile is white 20 % ON the CTA card, so it composites separately
+    tile = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).rounded_rectangle((106, 1256, 190, 1340), radius=24, fill=_wa(0.20))
+    img = Image.alpha_composite(img, tile)
+
+    # ── big number: 300 px per design, shrunk only if it would not fit ─────
+    # "1.000" fits at the design size; "100.000" would run off the canvas, so
+    # anything wider than the content column steps down and is re-centred
+    # vertically inside the design's number band (ink 361 … 574).
+    size, track = 300, -15.0
+    while size > 120:
+        nf = _ms_font(size, 900)
+        track = -0.05 * size                    # letter-spacing -0.05em
+        nw = _tracked_w(m, num, nf, track)
+        if nw <= W - 2 * 68:
+            break
+        size -= 4
+    top, bottom = nf.getbbox(num)[1], nf.getbbox(num)[3]
+    nx = (W - nw) / 2
+    ny = 361 + (213 - (bottom - top)) / 2 - top
+    off, stroke = round(size * 14 / 300), max(2, round(size * 3 / 300))
+
+    ghost = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(ghost)
+    x = nx + off                                # decorative offset outline copy
+    for ch in num:
+        gd.text((x, ny + off), ch, font=nf, fill=(0, 0, 0, 0),
+                stroke_width=stroke, stroke_fill=_wa(0.16))
+        x += m.textlength(ch, font=nf) + track
+    img = Image.alpha_composite(img, ghost)
+
+    # ── text layer ─────────────────────────────────────────────────────────
+    text = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(text)
+    white, acc = _wa(1.0), accent + (255,)
+
+    wf, wm = _ms_font(27, 900), config.PROFILE.WORDMARK
+    _tracked(draw, 134, _ink_y(wf, wm, 190), wm, wf, white, 0.81)
+    _tracked(draw, bx0 + 20, _ink_y(bf, badge, 192), badge, bf, acc, 3.36)
+
+    _tracked_center(draw, "GEKNACKT", _ms_font(30, 800), 305, _wa(0.50), 7.2)
+    _tracked(draw, nx, ny, num, nf, white, track)
+
+    ff = _ms_font(60, 900)
+    fw = _tracked_w(draw, "FOLLOWER", ff, 3.6)
+    fx = (W - fw) / 2
+    _tracked(draw, fx, _ink_y(ff, "FOLLOWER", 633), "FOLLOWER", ff, acc, 3.6)
+    for x0 in (fx - 92, fx + fw + 22):          # the 70×4 rules left and right
+        draw.rounded_rectangle((x0, 652, x0 + 70, 656), radius=2, fill=acc)
+
+    _tracked_center(draw, "Ihr seid die Besten!", _ms_font(78, 900), 760, white, -1.95)
+    sf = _ms_font(30, 600)
+    for i, line in enumerate(("Danke für euer Vertrauen, jedes Like und jede Nachricht.",
+                              config.PROFILE.MILESTONE_TAGLINE)):
+        _tracked_center(draw, line, sf, 861 + i * 44, _wa(0.68))
+
+    lf = _ms_font(24, 800)
+    _tracked(draw, 106, _ink_y(lf, "NÄCHSTES ZIEL", 1051), "NÄCHSTES ZIEL", lf, _wa(0.50), 2.4)
+    gf = _ms_font(54, 900)
+    draw.text((974 - draw.textlength(goal, font=gf), _ink_y(gf, goal, 1025)), goal,
+              font=gf, fill=acc)
+    rest = f"Nur noch {missing} bis {goal} – das schaffen wir!"
+    rf = _ms_font(26, 800)
+    draw.text((106, _ink_y(rf, rest, 1138)), rest, font=rf, fill=white)
+
+    _ms_share_icon(draw, 148, 1298)
+    tf = _ms_font(42, 900)
+    draw.text((218, _ink_y(tf, "Teilt diese Story!", 1260)), "Teilt diese Story!",
+              font=tf, fill=white)
+    hf = _ms_font(26, 600)
+    draw.text((218, _ink_y(hf, hint, 1311)), hint, font=hf, fill=_wa(0.90))
+
+    foot, lff = config.PROFILE.MILESTONE_FOOTER, _ms_font(22, 600)
+    draw.text((68, _ink_y(lff, foot, 1853)), foot, font=lff, fill=_wa(0.40))
+    rff, handle = _ms_font(22, 700), config.BRAND_HANDLE
+    draw.text((1012 - draw.textlength(handle, font=rff), _ink_y(rff, handle, 1853)),
+              handle, font=rff, fill=_wa(0.50))
+
+    return _save(Image.alpha_composite(img, text).convert("RGB"), out_path)

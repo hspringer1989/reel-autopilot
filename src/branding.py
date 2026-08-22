@@ -7,6 +7,7 @@ for the SIGNAL meaning (bullish/neutral/bearish) and are not the brand accent.""
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 import config
 
@@ -37,6 +38,28 @@ def load_font(size: int, bold: bool = False):
         except OSError:
             continue
     return ImageFont.load_default()
+
+
+# ── Archivo (variable font, bundled) ───────────────────────────────────────
+# The Claude-Design story templates are specced in Archivo with weights 500–900.
+# Arial/DejaVu only give us two weights AND differ between dev (Windows/Arial)
+# and server (Linux/DejaVu) — which shifts every line break. The bundled
+# variable font makes those renderers pixel-stable on both.
+_ARCHIVO = Path(__file__).resolve().parents[1] / "assets" / "fonts" / "Archivo[wdth,wght].ttf"
+
+
+def load_weighted_font(size: int, weight: int = 700):
+    """Archivo at an explicit weight (100–900). Falls back to the Arial/DejaVu
+    pair when the bundled font or variable-font support is unavailable, so a
+    renderer using this never hard-fails — it only loses the exact weight."""
+    from PIL import ImageFont
+
+    try:
+        font = ImageFont.truetype(str(_ARCHIVO), size)
+        font.set_variation_by_axes([float(weight), 100.0])  # axes: Weight, Width
+        return font
+    except (OSError, ValueError, AttributeError):
+        return load_font(size, bold=weight >= 700)
 
 
 def wrap_lines(text: str, width_chars: int) -> list[str]:

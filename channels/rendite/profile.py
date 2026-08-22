@@ -32,6 +32,10 @@ DISCLAIMER_CHECK = "anlageberatung"
 WORDMARK = "RENDITE RADAR"                 # brandmark on light story cards
 PHOTO_WORDMARK = ("RENDITE", "RADAR")      # two-banner wordmark on photo covers
 MILESTONE_TAGLINE = "Ihr macht Rendite Radar zu dem, was es ist."
+# Meilenstein-Story: Akzentfarbe (Design lässt #0a7dd4/#0a9d5f/#c9a227/#e0641e zu;
+# ohne diesen Key nimmt die Engine PALETTE["BLUE"]) + Teilen-Aufruf.
+MILESTONE_ACCENT = "#0a7dd4"
+MILESTONE_SHARE_HINT = "Sendet den Kanal an jemanden, der Aktienanalysen liebt."
 
 # ── Themenbeschaffung: Quellen + Bewertung ─────────────────────────────────
 # Übernommen 1:1 aus dem bisherigen Engine-Code: die Listen sind die alten

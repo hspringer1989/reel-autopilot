@@ -217,6 +217,22 @@ Shared blue-on-dark Renditeradar palette (BLUE #2386D1, matching the Claude-Desi
 feed renderer so stories and feed posts look consistent. Traffic-light green/amber/red stays
 reserved for the signal meaning, not the brand accent.
 
+`load_weighted_font(size, weight)` loads the bundled **Archivo** variable font
+(`assets/fonts/`, OFL) at any weight 100–900. Use it for anything specced in the Claude-Design
+templates: Arial/DejaVu only offer two weights AND differ between dev (Windows/Arial) and
+server (Linux/DejaVu), which silently shifts every line break. `load_font` keeps the old
+behaviour for the existing cards.
+
+**Milestone story** (`render_milestone_story`) is a pixel-accurate rebuild of the design
+handoff in `docs/design/story-meilenstein.{md,html}` — near-black stage, elliptical accent
+glow, radar rings, 14 fixed confetti shapes, offset outline number, progress card, share CTA.
+Rules that are easy to break when editing it: translucent white (the design states almost
+every tint as `rgba(255,255,255,x)`) must be drawn on an RGBA layer and composited — drawing
+it onto RGB renders it solid white; text is positioned by INK top (`_ink_y`), not by the
+ascender box; and CSS letter-spacing adds the gap after *every* character including the last,
+which is what centres tracked text the way the reference does. The accent is the only
+channel-specific value (`PROFILE.MILESTONE_ACCENT`, default `PALETTE["BLUE"]`).
+
 ### Ticker cooldown
 
 `build_daily_stories` excludes tickers analysed in the last `STOCK_REPEAT_COOLDOWN_DAYS` (30)

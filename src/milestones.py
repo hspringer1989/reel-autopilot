@@ -67,6 +67,7 @@ async def check_follower_milestone(followers: int | None = None) -> int | None:
     path = render_milestone_story(
         milestone, goal,
         str(config.STORY_DIR / f"milestone_{milestone}_{today.strftime('%Y%m%d')}.jpg"),
+        current=followers,
     )
     caption = (f"🎉 Meilenstein: {milestone} Follower geknackt (aktuell {followers})!\n"
                f"Nach ✅ wird die Story sofort gepostet.\n\n{_DISCLAIMER}")

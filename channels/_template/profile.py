@@ -46,6 +46,11 @@ DISCLAIMER_CHECK = "TODO(<channel>): z. B. 'bildung'"
 WORDMARK = "TODO(<channel>): z. B. 'TECH KANAL'"       # Brandmark auf hellen Story-Cards
 PHOTO_WORDMARK = ("TODO", "TODO")                       # zwei Banner-Wörter auf Foto-Covern
 MILESTONE_TAGLINE = "TODO(<channel>): Dankes-Satz mit Kanalnamen"
+# Optional: Akzentfarbe der Meilenstein-Story (Hex). Ohne diesen Key nimmt die
+# Engine PALETTE["BLUE"]. Freigegebene Varianten: #0a7dd4 #0a9d5f #c9a227 #e0641e
+MILESTONE_ACCENT = None
+# Optional: Teilen-Aufruf auf der Meilenstein-Karte (Default ist kanalneutral).
+MILESTONE_SHARE_HINT = "TODO(<channel>): z. B. 'Sendet den Kanal an jemanden, der X mag.'"
 
 # ── Themenbeschaffung: Quellen + Bewertung ─────────────────────────────────
 # Aus welchen Quellen der Kanal seine Themen zieht. Das ist Kanal-Identität, keine

@@ -33,3 +33,22 @@ def test_render_milestone_card(tmp_path):
     out = render_milestone_story(100, 200, str(tmp_path / "milestone.jpg"))
     with Image.open(out) as img:
         assert img.size == (1080, 1920)
+
+
+def test_milestone_number_never_leaves_the_canvas(tmp_path):
+    """The design fixes the big number at 300 px, which only holds up to ~5
+    digits — "100.000" would bleed off both edges. Every configured milestone
+    must stay inside the 68 px content column."""
+    from PIL import Image
+
+    import config
+
+    for mark in config.FOLLOWER_MILESTONES:
+        out = render_milestone_story(mark, next_goal(mark), str(tmp_path / f"{mark}.jpg"))
+        with Image.open(out) as img:
+            px = img.convert("RGB").load()
+            xs = [x for x in range(1080) for y in range(361, 574, 4)
+                  if min(px[x, y]) > 215]
+        assert xs, f"{mark}: keine Zahl gerendert"
+        assert 60 <= min(xs) and max(xs) <= 1020, \
+            f"{mark}: Zahl läuft aus dem Bild ({min(xs)}…{max(xs)})"
