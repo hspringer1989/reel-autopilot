@@ -127,6 +127,19 @@ def _recent_topics(limit: int = 12) -> list[str]:
 
 
 def _used_opener_ids(limit: int = 40) -> set[int]:
+    """Alle je verwendeten Clip-IDs aus dem Register.
+
+    Frueher las diese Funktion nur das Skript-JSON der letzten Reels. Das kannte aber
+    ausschliesslich die automatisch gebauten — die handgebauten schreiben dort keine
+    opener_id. Von rund dreissig verbrauchten Clips waren vier sichtbar, und am
+    22.08.2026 wiederholte sich prompt ein Startbild.
+    """
+    from src.render.opener_history import verwendete_ids
+
+    return verwendete_ids()
+
+
+def _used_opener_ids_alt(limit: int = 40) -> set[int]:
     """Bereits verwendete Opener-Clips. Harter Filter; die Motivklassen-Regel
     kommt zusätzlich als Prosa in den Auswahl-Prompt."""
     used: set[int] = set()
@@ -146,6 +159,17 @@ def _used_opener_ids(limit: int = 40) -> set[int]:
 
 
 def _opener_history_note(limit: int = 10) -> str:
+    """Motivklassen der letzten Opener als Prosa fuer den Auswahl-Prompt.
+
+    Die ID-Sperre verhindert denselben Clip, nicht dasselbe Motiv — ein zweiter
+    Sonnenuntergang mit anderer ID faellt genauso auf.
+    """
+    from src.render.opener_history import motivklassen
+
+    return chr(10).join(f"- {m}" for m in motivklassen(limit))
+
+
+def _opener_history_note_alt(limit: int = 10) -> str:
     """Motivklassen der letzten Opener in Prosa, für den Auswahl-Prompt."""
     notes: list[str] = []
     with session_scope() as session:
@@ -394,9 +418,15 @@ async def generate_autonomous_reel(target_seconds: int = 40) -> AutoReel:
     choice = pick_opener(
         llm, research.topic, queries,
         exclude_ids=_used_opener_ids(), history_note=_opener_history_note(),
+        # (beide lesen jetzt das Register, siehe unten)
     )
+    # Kein ueberzeugender Startclip darf NICHT das ganze Reel kosten: Recherche,
+    # Faktencheck und Skript sind an dieser Stelle fertig und geprueft. Am 22.08.2026
+    # wurde genau deshalb ein fertiges Reel verworfen und der RSS-Notpfad uebernahm.
+    # Ohne Clip startet das Reel eben auf einem gezeichneten Frame.
     if choice.path is None:
-        return AutoReel(None, f"Kein passender Opener gefunden: {choice.reason}")
+        logger.warning(f"Kein Opener-Clip ueberzeugt ({choice.reason}) — "
+                       f"das Reel startet auf einem Datenframe")
 
     texts = [str(s) for s in script_data["segments"] if str(s).strip()]
     title = str(script_data.get("title") or research.title)
@@ -425,7 +455,12 @@ async def generate_autonomous_reel(target_seconds: int = 40) -> AutoReel:
     # Ein B-Roll-Eintrag je Segment: Opener zuerst, danach gezeichnete Datenframes.
     # Wo kein Bauplan kam, bleibt None und der Renderer legt einen Farbverlauf.
     frames = _frames_bauen(script_data, len(texts) - 1, reel_id)
-    broll = [choice.path] + frames
+    if choice.path is None:
+        # Erstes Segment bekommt einen eigenen Frame statt des Clips.
+        frames = _frames_bauen(script_data, len(texts), reel_id)
+        broll = frames
+    else:
+        broll = [choice.path] + frames
     gezeichnet = sum(1 for f in frames if f)
     logger.info(f"{gezeichnet} von {len(frames)} Datenframes gezeichnet")
     video = render_reel(script, tts, broll, base.with_suffix(".mp4"), pick_music())

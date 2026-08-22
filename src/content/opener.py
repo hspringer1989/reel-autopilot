@@ -211,4 +211,11 @@ def pick_opener(llm: LLMProvider, topic: str, queries: list[str],
     vid = prepared[pick - 1][0]
     path = _cache_clip(vid)
     logger.info(f"Opener gewählt: {vid} — {answer.get('reason', '')}")
-    return OpenerChoice(vid, path, str(answer.get("reason", "")))
+    grund = str(answer.get("reason", ""))
+    # Sofort eintragen, nicht erst beim Rendern: ab hier ist der Clip verbraucht,
+    # auch wenn das Reel spaeter verworfen wird. Ein zweimal gezeigtes Vorschaubild
+    # ist schlimmer als ein ungenutzter Clip.
+    from src.render.opener_history import merken
+
+    merken(vid, grund)
+    return OpenerChoice(vid, path, grund)

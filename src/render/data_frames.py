@@ -63,6 +63,20 @@ class FrameSpec:
     footer: str = "Keine Anlageberatung · KI-generiert"
 
 
+def _passend(d, text: str, max_breite: int, groesse: int, bold: bool = False):
+    """Groesste Schrift, mit der `text` noch in `max_breite` passt.
+
+    Die Hoehenpruefung allein reicht nicht: bei Reel #112 lief "9 Stimmen" im
+    Vergleichs-Frame ueber den Kartenrand hinaus, weil nur vertikal skaliert wurde.
+    Breite muss pro Textstueck geprueft werden, nicht fuer den Frame als Ganzes.
+    """
+    f = F(groesse, bold=bold)
+    while groesse > 16 and d.textlength(text, font=f) > max_breite:
+        groesse -= 2
+        f = F(groesse, bold=bold)
+    return f
+
+
 def _akzent(spec: FrameSpec):
     return _AKZENTE.get(spec.accent, BLUE), _FLAECHEN.get(spec.accent, _FLAECHEN["blue"])
 
@@ -154,7 +168,7 @@ def _zeichne(spec: FrameSpec, skala: float) -> Image.Image:
 
     if spec.highlight:
         gr = int(96 * skala)
-        f = F(gr, bold=True)
+        f = _passend(d, spec.highlight, W - 2 * MARGIN, gr, bold=True)
         y += int(24 * skala)
         d.text(((W - d.textlength(spec.highlight, font=f)) / 2, y),
                spec.highlight, font=f, fill=farbe)
@@ -176,10 +190,11 @@ def _zeichne(spec: FrameSpec, skala: float) -> Image.Image:
             col = farbe if i == 1 else MUTED
             d.rounded_rectangle((x0, y, x0 + breite, y + hoehe), radius=22, fill=bg)
             cx = x0 + breite / 2
-            fl = F(int(34 * skala), bold=True)
+            innen = breite - 36
+            fl = _passend(d, label, innen, int(34 * skala), bold=True)
             d.text((cx - d.textlength(label, font=fl) / 2, y + int(30 * skala)),
                    label, font=fl, fill=col)
-            fw = F(int(80 * skala), bold=True)
+            fw = _passend(d, wert, innen, int(80 * skala), bold=True)
             d.text((cx - d.textlength(wert, font=fw) / 2, y + int(120 * skala)),
                    wert, font=fw, fill=col)
         y += hoehe + 22
@@ -193,7 +208,8 @@ def _zeichne(spec: FrameSpec, skala: float) -> Image.Image:
                       fill=farbe)
             d.text((MARGIN + 40, y + hoehe / 2 - 18), str(i + 1), font=nf, fill=WHITE)
             d.text((MARGIN + 96, y + 24), label, font=F(int(28 * skala)), fill=MUTED)
-            d.text((MARGIN + 96, y + 62), wert, font=F(int(34 * skala), bold=True), fill=FG)
+            fw = _passend(d, wert, W - 2 * MARGIN - 130, int(34 * skala), bold=True)
+            d.text((MARGIN + 96, y + 62), wert, font=fw, fill=FG)
             y += hoehe + 14
 
     else:                                            # rows

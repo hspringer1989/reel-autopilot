@@ -117,3 +117,40 @@ class TestBauplaene:
 
     def test_ohne_frames_schluessel(self, tmp_path, monkeypatch):
         assert self._bauen({}, 3, tmp_path, monkeypatch) == [None, None, None]
+
+
+class TestBreite:
+    """Vorfall Reel #112: im Vergleichs-Frame lief "9 Stimmen" ueber den Kartenrand.
+    Die Safe-Zone-Pruefung sieht das nicht — sie misst nur die Hoehe."""
+
+    def _spalten_frei(self, img, x_von, x_bis, y_von, y_bis) -> bool:
+        """Ist der senkrechte Streifen zwischen zwei Karten leer?"""
+        px = img.convert("L").load()
+        for y in range(y_von, y_bis, 3):
+            for x in range(x_von, x_bis):
+                if px[x, y] > 90:
+                    return False
+        return True
+
+    def test_lange_werte_bleiben_in_den_karten(self, tmp_path):
+        spec = FrameSpec(kind="compare", kicker="ABSTIMMUNG", title="Dissens",
+                         accent="amber",
+                         rows=[("Für unveränderte Zinsen", "9 Stimmen"),
+                               ("Für Zinserhöhung", "3 Stimmen")])
+        img = _bild(spec, tmp_path)
+        # Der Spalt zwischen den beiden Karten ist 40 px breit, mittig bei x=540.
+        assert self._spalten_frei(img, 528, 552, 500, 1000)
+
+    def test_sehr_langer_wert_wird_klein_genug(self, tmp_path):
+        spec = FrameSpec(kind="compare", rows=[("A", "einhundertvierundzwanzig Punkte"),
+                                               ("B", "zweihundert Punkte")])
+        img = _bild(spec, tmp_path)
+        assert self._spalten_frei(img, 528, 552, 400, 1000)
+
+    def test_lange_grosse_zahl_bleibt_im_bild(self, tmp_path):
+        spec = FrameSpec(highlight="+1.234.567,89 Prozentpunkte",
+                         rows=[("A", "1")])
+        img = _bild(spec, tmp_path)
+        px = img.convert("L").load()
+        for y in range(300, 700, 2):          # Raender muessen frei bleiben
+            assert px[8, y] < 90 and px[1071, y] < 90
